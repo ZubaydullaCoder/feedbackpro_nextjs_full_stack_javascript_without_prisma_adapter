@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# FeedbackPro - Next.js Full Stack Application
+
+A comprehensive feedback collection platform built with Next.js, allowing businesses to gather authentic customer feedback via SMS and QR codes.
+
+## Features
+
+- **QR Code Feedback**: Generate QR codes for instant feedback collection
+- **SMS Feedback**: Send unique, single-use feedback links via SMS
+- **Analytics Dashboard**: Track response rates and analyze feedback data
+- **Tamper-Proof System**: Ensure feedback integrity with a system that prevents manipulation
+- **Incentive System**: Reward customers who provide feedback with discount codes
+
+## Tech Stack
+
+- **Frontend**: Next.js, React, Tailwind CSS, shadcn/ui
+- **Backend**: Next.js API Routes
+- **Database**: PostgreSQL (without Prisma adapter)
+- **Authentication**: NextAuth.js
+
+## Project Structure
+
+The project follows a clear organization pattern:
+
+- `app/(public)/` - Public-facing pages (landing, features, etc.)
+- `app/(auth)/` - Authentication-related pages
+- `app/(dashboard)/` - Authenticated user dashboard pages
+- `components/shared/` - Reusable components used across the application
+- `components/features/public/` - Feature-specific components for public pages
+- `lib/` - Utility functions and shared logic
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js 18+
+- PostgreSQL database
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+1. Clone the repository:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   git clone https://github.com/ZubaydullaCoder/feedbackpro_nextjs_full_stack_javascript_without_prisma_adapter.git
+   cd feedbackpro_nextjs_full_stack_javascript_without_prisma_adapter
+   ```
 
-## Learn More
+2. Install dependencies:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. Set up environment variables:
+   Create a `.env.local` file with the following variables:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```
+   DATABASE_URL=your_postgresql_connection_string
+   NEXTAUTH_SECRET=your_nextauth_secret
+   NEXTAUTH_URL=http://localhost:3000
+   ```
 
-## Deploy on Vercel
+4. Run the development server:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   npm run dev
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+
+## Development Approach
+
+This project follows best practices for component organization and reusability:
+
+- **Component Composition**: Building complex UIs by composing smaller components
+- **Container System**: Consistent spacing and width constraints across the application
+- **Feature-Based Organization**: Components grouped by feature rather than by type
+- **Responsive Design**: Layouts that work well on all device sizes
+
+## License
+
+[MIT](LICENSE)
