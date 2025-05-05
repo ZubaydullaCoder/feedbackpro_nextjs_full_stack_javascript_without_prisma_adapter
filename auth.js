@@ -40,8 +40,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { email: credentials.email },
           });
 
-          // If user not found or doesn't have a password (Google-only user)
-          if (!user || !user.hashedPassword) {
+          // If user not found
+          if (!user) {
+            return null; // User not found at all
+          }
+
+          // If user exists but doesn't have a password and has a Google account
+          if (!user.hashedPassword && user.googleId) {
+            throw new Error("GoogleAccountExists"); // Specific error for Google users trying credentials
+          }
+
+          // If user exists but doesn't have a password for some other reason
+          if (!user.hashedPassword) {
             return null;
           }
 
@@ -82,8 +92,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     async jwt({ token, user, account, profile }) {
-      // Initial sign-in with Google
+      // This callback runs on sign-in and whenever the session is accessed.
+      // 'user', 'account', 'profile' are only available during sign-in.
+
+      // Handle OAuth Sign-in (Google, etc.)
       if (account?.provider === "google" && profile) {
+        console.log("[JWT Callback] Processing Google sign-in...");
         try {
           // Try to find user by googleId
           let dbUser = await prisma.user.findUnique({
@@ -138,6 +152,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           if (dbUser) {
+            // Log the user object fetched/created from DB
+            console.log(
+              "[JWT Callback - Google] Found/Created dbUser:",
+              dbUser
+            );
             // Set token data from database user
             token.sub = dbUser.id;
             token.email = dbUser.email;
@@ -146,13 +165,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.role = dbUser.role;
             token.isActive = dbUser.isActive;
           }
+          // Log the token state after attempting Google user processing
+          console.log("[JWT Callback - Google] Token after processing:", token);
         } catch (error) {
           console.error("JWT Google callback error:", error);
         }
       }
 
-      // Initial sign-in with Credentials
-      if (user) {
+      // Handle Credentials Sign-in
+      // The 'user' object is passed from the 'authorize' callback on successful credentials login.
+      if (account?.provider === "credentials" && user) {
+        console.log("[JWT Callback] Processing Credentials sign-in...");
         token.sub = user.id;
         token.email = user.email;
         token.name = user.name;
@@ -160,6 +183,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role;
         token.isActive = user.isActive;
       }
+
+      // Log the final token being returned by the JWT callback
+      console.log("[JWT Callback] Returning token:", token);
 
       // We'll rely on the initial token data for user status
       // This avoids Prisma queries in the JWT callback which can run in the browser
@@ -169,7 +195,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async session({ session, token }) {
+      // Log the token received by the session callback
+      // console.log("[Session Callback] Received token:", token);
       if (token) {
+        // console.log("[Session Callback] Assigning properties to session.user");
         session.user.id = token.sub;
         session.user.email = token.email;
         session.user.name = token.name;
@@ -177,6 +206,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role;
         session.user.isActive = token.isActive;
       }
+      // Log the session object being returned
+      // console.log("[Session Callback] Returning session:", session);
       return session;
     },
   },

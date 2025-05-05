@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { signIn } from "next-auth/react"; // Import signIn directly from next-auth/react
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -31,6 +32,7 @@ export default function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleAccount, setIsGoogleAccount] = useState(false);
 
   const form = useForm({
     resolver: zodResolver(loginSchema),
@@ -42,6 +44,8 @@ export default function LoginForm() {
 
   const onSubmit = async (data) => {
     setIsLoading(true);
+    // Reset Google account state on new submission
+    setIsGoogleAccount(false);
     try {
       // Show loading toast
       toast({
@@ -57,13 +61,29 @@ export default function LoginForm() {
       });
 
       if (result?.error) {
-        // Handle authentication error
+        // Determine the appropriate error message
+        console.log("Login error:", result.error);
+        let errorTitle = "Authentication failed";
+        let errorDescription = "Please check your credentials and try again.";
+
+        // Check for specific error types
+        if (result.error === "CredentialsSignin") {
+          errorDescription = "Invalid email or password.";
+          setIsGoogleAccount(false);
+        } else if (result.error.includes("Configuration")) {
+          errorTitle = "Google Account Detected";
+          errorDescription =
+            "This email is linked to a Google account. Please use the 'Sign in with Google' button below.";
+          // Set the Google account flag to highlight the button
+          setIsGoogleAccount(true);
+        } else {
+          setIsGoogleAccount(false);
+        }
+
+        // Show the error toast
         toast({
-          title: "Authentication failed",
-          description:
-            result.error === "CredentialsSignin"
-              ? "Invalid email or password."
-              : "Please check your credentials and try again.",
+          title: errorTitle,
+          description: errorDescription,
           variant: "destructive",
         });
         setIsLoading(false);
@@ -94,6 +114,8 @@ export default function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    // Reset Google account state
+    setIsGoogleAccount(false);
     try {
       toast({
         title: "Signing in with Google...",
@@ -102,10 +124,7 @@ export default function LoginForm() {
 
       // Call signIn directly with Google provider
       // This will automatically redirect to Google's auth page
-      await signIn("google", {
-        // redirectTo: "/dashboard",
-        callbackUrl: "/dashboard",
-      });
+      await signIn("google", { callbackUrl: "/dashboard" });
 
       // Note: The code below will only run if the redirect doesn't happen immediately
       // We intentionally don't reset loading state to keep the form disabled
@@ -173,8 +192,8 @@ export default function LoginForm() {
       </div>
 
       <Button
-        variant="outline"
-        className="w-full"
+        variant={isGoogleAccount ? "default" : "outline"}
+        className={`w-full ${isGoogleAccount ? "animate-pulse border-2 border-primary" : ""}`}
         onClick={handleGoogleSignIn}
         disabled={isLoading}
       >
@@ -195,6 +214,12 @@ export default function LoginForm() {
         </svg>
         Sign in with Google
       </Button>
+
+      {isGoogleAccount && (
+        <div className="text-center text-sm text-primary font-medium mt-2">
+          ↑ Use this button to sign in with your Google account ↑
+        </div>
+      )}
 
       <div className="text-center text-sm">
         Don&apos;t have an account?{" "}

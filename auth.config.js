@@ -14,6 +14,12 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const isActive = auth?.user?.isActive;
 
+      // Log the state for debugging redirects
+      console.log(`[Auth Middleware] Path: ${pathname}`);
+      console.log(`[Auth Middleware] isLoggedIn: ${isLoggedIn}`);
+      console.log(`[Auth Middleware] isActive: ${isActive}`);
+      console.log(`[Auth Middleware] User:`, auth?.user);
+
       // Protected routes that require authentication
       const isProtectedRoute =
         pathname.startsWith("/dashboard") || pathname.startsWith("/surveys");
@@ -27,6 +33,9 @@ export const authConfig = {
 
       // Redirect unauthenticated users from protected routes to login
       if (isProtectedRoute && (!isLoggedIn || !isActive)) {
+        console.log(
+          `[Auth Middleware] Denying access to ${pathname}. Redirecting to login.`
+        );
         return false;
       }
 
@@ -40,6 +49,9 @@ export const authConfig = {
         isAdminRoute &&
         (!isLoggedIn || auth.user.role !== "ADMIN" || !isActive)
       ) {
+        console.log(
+          `[Auth Middleware] Denying access to ${pathname} (Admin). Redirecting.`
+        );
         return false;
       }
 
