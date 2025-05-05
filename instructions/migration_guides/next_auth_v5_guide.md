@@ -1,473 +1,578 @@
-Migrating to the latest version of NextAuth.js (now Auth.js, version 5) for a modern Next.js application using the App Router without TypeScript requires understanding the key changes from previous versions (e.g., v4) and aligning with current best practices. This comprehensive guide will walk you through the migration process, focusing on integrating Auth.js v5 into a Next.js App Router project, leveraging Server Components, Route Handlers, and secure authentication patterns. Since you’ve used an older version of NextAuth.js, I’ll highlight breaking changes, new conventions, and provide step-by-step instructions tailored to your JavaScript-based project.
+Okay, here is a comprehensive guide to integrating the latest version of NextAuth.js (v5, now officially part of the Auth.js project) into your modern Next.js App Router project using JavaScript, along with best practices and a migration guide from older versions.
+
+**Current Date:** Saturday, May 3, 2025
+
+**Note:** NextAuth.js v5 represents a significant shift, designed primarily for the Next.js App Router and Edge compatibility. It's now often referred to simply as Auth.js, and the primary package is `@auth/nextjs`.
 
 ---
 
-## Comprehensive Migration Guide to Auth.js v5 with Next.js App Router (No TypeScript)
+## Comprehensive Guide: NextAuth.js (Auth.js v5) with Next.js App Router (JavaScript)
 
-### Table of Contents
+### 1. Introduction
 
-- [Comprehensive Migration Guide to Auth.js v5 with Next.js App Router (No TypeScript)](#comprehensive-migration-guide-to-authjs-v5-with-nextjs-app-router-no-typescript)
-  - [Table of Contents](#table-of-contents)
-  - [1. Overview of Auth.js v5 Changes](#1-overview-of-authjs-v5-changes)
-  - [2. Prerequisites](#2-prerequisites)
-  - [3. Step-by-Step Migration Guide](#3-step-by-step-migration-guide)
-    - [Step 1: Upgrade Next.js and Install Auth.js v5](#step-1-upgrade-nextjs-and-install-authjs-v5)
-    - [Step 2: Set Up the Auth.js Configuration](#step-2-set-up-the-authjs-configuration)
-    - [Step 3: Create Route Handlers for Authentication](#step-3-create-route-handlers-for-authentication)
-    - [Step 4: Implement Session Management](#step-4-implement-session-management)
-    - [Step 5: Protect Routes with Middleware](#step-5-protect-routes-with-middleware)
-    - [Step 6: Handle Client-Side Authentication](#step-6-handle-client-side-authentication)
-    - [Step 7: Migrate from Older NextAuth.js Versions](#step-7-migrate-from-older-nextauthjs-versions)
-    - [Step 8: Testing and Debugging](#step-8-testing-and-debugging)
-  - [4. Best Practices for Auth.js v5 with Next.js App Router](#4-best-practices-for-authjs-v5-with-nextjs-app-router)
-  - [5. Common Pitfalls and Troubleshooting](#5-common-pitfalls-and-troubleshooting)
-  - [6. Additional Resources](#6-additional-resources)
-
----
-
-### 1. Overview of Auth.js v5 Changes
-
-Auth.js v5 (previously NextAuth.js) is a major rewrite with a focus on simplifying authentication, improving compatibility with Next.js App Router, and aligning with web standards. Key changes from v4 (and older versions) include:
-
-- **Simplified Configuration**: The configuration is now centralized in a single file at the project root, exporting functions like `auth`, `signIn`, and `signOut`, reducing the need to pass `authOptions` around.
-- **App Router Support**: Full support for Server Components, Route Handlers, and server-first architecture, leveraging standard Web APIs (`cookies`, `headers`).
-- **Stricter OAuth Compliance**: Stricter adherence to OAuth/OIDC specifications, which may affect some providers. OAuth 1.0 is deprecated.
-- **New `auth()` Function**: Replaces `getServerSession` and `getSession` for server-side session retrieval, optimized for performance with database-backed sessions.
-- **Edge Compatibility**: Improved support for Edge runtime, with considerations for database/ORM compatibility.
-- **Breaking Changes**:
-  - Minimum Next.js version is 14.0.
-  - Imports like `next-auth/next` and `next-auth/middleware` are replaced.
-  - The old API route (`pages/api/auth/[...nextauth].js`) is simplified or replaced with Route Handlers.
-  - Session and JWT callbacks have updated signatures.
-
-Since you’re using the App Router and JavaScript, this guide will focus on idiomatic App Router patterns, avoiding TypeScript-specific instructions, and addressing migration from older versions (likely v3 or v4).
-
----
+Auth.js (formerly NextAuth.js) is a complete open-source authentication solution for modern web applications. Version 5 is rebuilt for the Next.js App Router, offering simplified configuration, better Edge support, and improved developer experience compared to v4. This guide focuses on setting it up in a JavaScript Next.js project.
 
 ### 2. Prerequisites
 
-Before starting, ensure you have:
+- A Next.js project (version 13.4 or later) using the App Router.
+- Node.js installed.
+- You are using JavaScript (`.js` or `.jsx` files), not TypeScript.
 
-- A Next.js project using the App Router (Next.js 14 or 15 recommended).
-- Node.js version 16.14.0 or higher (Next.js 15 requires Node.js 18+).
-- Familiarity with Next.js Server Components, Route Handlers, and Middleware.
-- An existing NextAuth.js setup (v3 or v4) in a Pages Router or early App Router project.
-- Environment variables set up for your authentication providers (e.g., Google, GitHub) and database (if used).
-- A database (optional, for persistent sessions) like PostgreSQL with Prisma or MongoDB.
+### 3. Installation
+
+Install the core Auth.js library for Next.js and the React bindings:
+
+```bash
+npm install @auth/nextjs next-auth
+# or
+yarn add @auth/nextjs next-auth
+# or
+pnpm add @auth/nextjs next-auth
+# or
+bun add @auth/nextjs next-auth
+```
+
+- `@auth/nextjs`: The main library integration for Next.js v5.
+- `next-auth`: While the core logic is in `@auth/nextjs`, the `next-auth` package is often still needed, especially for React components/hooks like `SessionProvider` and `useSession`. Check the official Auth.js documentation for the most current dependency requirements as the ecosystem evolves.
+
+### 4. Environment Variables
+
+Create a `.env.local` file in your project root (if it doesn't exist) and add the following:
+
+```.env.local
+# Generate a strong secret using: openssl rand -hex 32
+# Required for signing/encrypting tokens and cookies
+AUTH_SECRET="YOUR_STRONG_RANDOM_SECRET"
+
+# Example for Google Provider (Add credentials for your chosen providers)
+AUTH_GOOGLE_ID="YOUR_GOOGLE_CLIENT_ID"
+AUTH_GOOGLE_SECRET="YOUR_GOOGLE_CLIENT_SECRET"
+
+# Optional: Needed for some deployment platforms or complex proxy setups
+# AUTH_URL="http://localhost:3000" # Development URL
+# AUTH_URL="https://yourdomain.com" # Production URL
+
+# Optional: Trust the host header from proxies (e.g., Vercel, Cloudflare)
+# Set to "true" if needed
+# AUTH_TRUST_HOST="true"
+
+# Optional: Enable debug messages
+# AUTH_DEBUG="true"
+```
+
+**Key Points:**
+
+- **`AUTH_SECRET`**: Mandatory in production. It secures your sessions and tokens. Keep it secret!
+- **Provider Variables**: Use the `AUTH_PROVIDER_ID` and `AUTH_PROVIDER_SECRET` format (e.g., `AUTH_GITHUB_ID`). Auth.js v5 automatically infers these if named correctly.
+- **`AUTH_URL`**: Often inferred automatically based on request headers, but explicitly setting it can prevent issues in some environments.
+- **Prefix:** Use the `AUTH_` prefix for environment variables (v4 used `NEXTAUTH_`).
+
+### 5. Core Configuration (`auth.config.js` and `auth.js`)
+
+Auth.js v5 splits configuration for better compatibility, especially with middleware.
+
+**a) `auth.config.js` (Root of project)**
+
+This file contains configuration options that need to be serializable (can be converted to simple data types), mainly for use in middleware which often runs in edge environments where database adapters might not work.
+
+```javascript
+// auth.config.js
+/** @type {import('@auth/nextjs').NextAuthConfig} */
+export const authConfig = {
+  // Configure custom pages if needed (optional)
+  pages: {
+    signIn: "/login", // Redirect users to /login if they are not signed in
+    // error: '/auth/error', // Error code passed in query string as ?error=
+    // verifyRequest: '/auth/verify-request', // (used for check email message)
+    // newUser: '/auth/new-user' // New users will be directed here on first sign in
+  },
+  // Callbacks for additional control (optional)
+  callbacks: {
+    // This callback is called before middleware checks authorization
+    // Use it to only allow access to certain pages if the user is authenticated
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
+
+      if (isOnDashboard) {
+        if (isLoggedIn) return true; // Allow access if logged in
+        return false; // Redirect unauthenticated users to login page
+      } else if (isLoggedIn) {
+        // Optionally redirect logged-in users from login page to dashboard
+        if (nextUrl.pathname === "/login") {
+          return Response.redirect(new URL("/dashboard", nextUrl));
+        }
+      }
+      // Allow access for all other routes by default
+      return true;
+    },
+    // Add other callbacks as needed (jwt, session - see auth.js below)
+  },
+  providers: [
+    // Add providers here if they are compatible with the Edge
+    // Usually, you'll add providers in auth.js unless specifically needed here
+    // for advanced middleware scenarios.
+    // Example: Credentials provider often configured here if used with middleware checks
+  ],
+};
+```
+
+**b) `auth.js` (Root of project)**
+
+This is the main configuration file where you'll set up most providers, adapters, session strategies, and detailed callbacks. It imports the `authConfig`.
+
+```javascript
+// auth.js
+import NextAuth from "@auth/nextjs";
+import { authConfig } from "./auth.config";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
+// import { PrismaAdapter } from '@auth/prisma-adapter'; // Example adapter
+// import { PrismaClient } from '@prisma/client'; // Example DB client
+
+// const prisma = new PrismaClient(); // Initialize DB client if using adapter
+
+export const {
+  handlers: { GET, POST }, // API Route handlers
+  auth, // Session management helper (server-side)
+  signIn, // Sign-in function (server-side)
+  signOut, // Sign-out function (server-side)
+  unstable_update, // Function to update session (server-side)
+} = NextAuth({
+  // Merge base config
+  ...authConfig,
+
+  // Add Database Adapter (optional)
+  // adapter: PrismaAdapter(prisma),
+
+  // Session Strategy (jwt is default if no adapter)
+  // session: { strategy: 'jwt' }, // Force JWT even with adapter
+  session: { strategy: "database" }, // Use database sessions (requires adapter)
+
+  // Add Authentication Providers
+  providers: [
+    Google({
+      // clientId and clientSecret are automatically picked up from env vars
+      // AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET
+      // You can override them here if needed:
+      // clientId: process.env.AUTH_GOOGLE_ID_OVERRIDE,
+      // clientSecret: process.env.AUTH_GOOGLE_SECRET_OVERRIDE,
+    }),
+    Credentials({
+      // You can provide a custom form on your sign-in page
+      // Or use the built-in credentials form (/api/auth/signin)
+      async authorize(credentials) {
+        // Add logic here to look up the user from the credentials supplied
+        console.log("Credentials received:", credentials);
+
+        // Example validation (replace with your actual user lookup)
+        // const user = await findUserByEmail(credentials.email);
+        const user = { id: "1", name: "J Smith", email: "jsmith@example.com" }; // Dummy user
+
+        if (
+          user /* && await bcrypt.compare(credentials.password, user.password) */
+        ) {
+          // Return user object (must contain at least `id`)
+          // Any object returned will be saved in `user` property of the JWT
+          return user;
+        } else {
+          // If you return null then an error will be displayed advising the user to check their details.
+          console.log("Invalid credentials");
+          return null;
+          // You can also Reject this callback with an Error thus the user will be sent to the error page with the error message as a query parameter
+          // throw new Error("Invalid credentials provided");
+        }
+      },
+    }),
+    // Add other providers (GitHub, Email, etc.)
+  ],
+
+  // Add detailed callbacks here (override or extend from auth.config.js if needed)
+  callbacks: {
+    ...authConfig.callbacks, // Include callbacks from auth.config.js
+
+    // Modify the session object (runs AFTER jwt callback)
+    async session({ session, token /* user */ }) {
+      // Send properties to the client, like an access_token and user.id from the token.
+      // The `token` object contains data returned from the `jwt` callback or database session data.
+      // The `user` object (if using database sessions) contains the user model from the database.
+      if (token?.sub && session.user) {
+        session.user.id = token.sub; // Add user ID to session
+      }
+      if (token?.role && session.user) {
+        session.user.role = token.role; // Add custom role to session
+      }
+      // console.log("Session Callback - Session:", session);
+      return session;
+    },
+
+    // Modify the JWT token (runs BEFORE session callback)
+    async jwt({ token, user, account, profile, isNewUser }) {
+      // This callback is called whenever a JWT is created (i.e. at sign in)
+      // or updated (i.e whenever a session is accessed in the client).
+      // `user`, `account`, `profile` and `isNewUser` are only passed on sign-in.
+      // console.log("JWT Callback - Token:", token);
+      // console.log("JWT Callback - User:", user); // Only available on sign-in
+      // console.log("JWT Callback - Account:", account); // Only available on sign-in
+
+      // Persist the OAuth access_token and user ID to the token right after signin
+      if (account && user) {
+        token.accessToken = account.access_token;
+        token.id = user.id; // Or token.sub = user.id (sub is standard JWT field for subject/user ID)
+        // Add custom claims like role
+        // token.role = user.role;
+      }
+      return token;
+    },
+  },
+});
+```
+
+### 6. API Route Handler
+
+Create the catch-all API route that Auth.js uses for handling sign-in, sign-out, callbacks, etc.
+
+Create the file `app/api/auth/[...nextauth]/route.js`:
+
+```javascript
+// app/api/auth/[...nextauth]/route.js
+import { handlers } from "@/auth"; // Referring to the auth.js we created
+
+export const { GET, POST } = handlers;
+
+// If you need to handle other methods separately:
+// export async function PUT(request) { /* ... */ }
+// export async function DELETE(request) { /* ... */ }
+
+// Runtime preference (optional)
+// export const runtime = "edge" // or "nodejs"
+```
+
+- Make sure your alias `@/` points to the root or `src/` directory correctly in `jsconfig.json` or `tsconfig.json`. If not using aliases, use relative paths like `import { handlers } from '../../../auth'`.
+
+### 7. Middleware for Route Protection
+
+Create a `middleware.js` file in the root of your project (or `src/` if using `src` directory) to protect routes.
+
+```javascript
+// middleware.js
+import { auth } from "@/auth"; // Import the 'auth' function from auth.js
+// Or import directly from auth.config if you defined `authorized` there and don't need the full NextAuth instance in middleware
+// import NextAuth from 'next-auth';
+// import { authConfig } from './auth.config';
+// export const { auth: middleware } = NextAuth(authConfig)
+
+export default auth; // Use the imported auth function directly as middleware
+
+// Alternatively, wrap it if you need to use `req` object for custom logic before auth logic runs:
+// export default auth((req) => {
+//   console.log("Middleware running for:", req.nextUrl.pathname);
+//   // Your custom logic here before auth verification
+//   // Note: You cannot directly return a response here if you want the `authorized` callback to run
+//   // Let the `auth` logic handle redirects based on the `authorized` callback in auth.config.js
+// });
+
+// Configuration for the middleware
+export const config = {
+  // Matcher specifies routes the middleware should run on.
+  // Use positive lookaheads to exclude static files and API routes
+  // Adjust the paths based on your application structure
+  matcher: [
+    "/dashboard/:path*", // Protect dashboard routes
+    "/profile", // Protect profile page
+    // Add other routes you want to protect
+    // Example excluding specific routes like API, static files, images:
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    // More complex example to protect everything EXCEPT specific public routes:
+    // '/((?!api|_next/static|_next/image|favicon.ico|login|signup|public-page).*)',
+  ],
+};
+```
+
+- The `auth` function imported from `auth.js` will automatically use the `authorized` callback defined in your `auth.config.js` to determine access.
+
+### 8. Session Provider for Client Components
+
+To use the `useSession` hook in client components, you need to wrap your application (or relevant parts) in a `SessionProvider`.
+
+**a) Create a Client Component Wrapper**
+
+Create `components/SessionProviderWrapper.js`:
+
+```javascript
+// components/SessionProviderWrapper.js
+"use client"; // This directive is essential
+
+import { SessionProvider } from "next-auth/react";
+
+export default function SessionProviderWrapper({ children, session }) {
+  return <SessionProvider session={session}>{children}</SessionProvider>;
+}
+```
+
+**b) Use the Wrapper in Root Layout**
+
+Import and use the wrapper in your root layout (`app/layout.js`):
+
+```javascript
+// app/layout.js
+import SessionProviderWrapper from "@/components/SessionProviderWrapper";
+// Import your global styles, fonts, etc.
+import "./globals.css";
+
+export const metadata = {
+  title: "My NextAuth App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({ children }) {
+  // Note: You cannot fetch the session directly here in the root layout server component
+  // if you need to pass it down to the client-side SessionProvider.
+  // The SessionProvider fetches the session client-side automatically.
+  // Passing `session` prop is generally needed for older Pages Router setups.
+  return (
+    <html lang="en">
+      <body>
+        <SessionProviderWrapper>
+          {" "}
+          {/* Wrap the children */}
+          {/* Add header, navbars, etc. here */}
+          <main>{children}</main>
+          {/* Add footer here */}
+        </SessionProviderWrapper>
+      </body>
+    </html>
+  );
+}
+```
+
+### 9. Accessing Session Data
+
+**a) Server Components**
+
+Use the `auth()` helper function imported from `@/auth`.
+
+```javascript
+// Example: app/dashboard/page.js (Server Component)
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+
+export default async function DashboardPage() {
+  const session = await auth(); // Get session data server-side
+
+  if (!session?.user) {
+    // This should ideally be handled by the middleware, but good as a fallback
+    redirect("/login");
+  }
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <p>Welcome, {session.user.name || session.user.email}!</p>
+      <p>Your ID: {session.user.id}</p> {/* Added via callbacks */}
+      <pre>{JSON.stringify(session, null, 2)}</pre>
+    </div>
+  );
+}
+```
+
+**b) Client Components**
+
+Use the `useSession` hook imported from `next-auth/react`. Make sure the component is rendered within the `<SessionProviderWrapper>`.
+
+```javascript
+// Example: components/UserProfile.js (Client Component)
+"use client"; // Mark as client component
+
+import { useSession } from "next-auth/react";
+
+export default function UserProfile() {
+  const { data: session, status } = useSession();
+  // status can be 'loading', 'authenticated', or 'unauthenticated'
+
+  if (status === "loading") {
+    return <p>Loading...</p>;
+  }
+
+  if (status === "unauthenticated") {
+    return <p>You are not signed in.</p>;
+  }
+
+  if (status === "authenticated") {
+    return (
+      <div>
+        <h2>Client Component Profile</h2>
+        <p>Signed in as {session.user?.name || session.user?.email}</p>
+        <p>User ID: {session.user?.id}</p> {/* Added via callbacks */}
+        {/* <pre>{JSON.stringify(session, null, 2)}</pre> */}
+      </div>
+    );
+  }
+
+  return null; // Should not happen
+}
+```
+
+### 10. Sign-in and Sign-out Functionality
+
+**a) Using Server Actions (Recommended for Forms)**
+
+Create buttons within `<form>` elements that trigger Server Actions.
+
+```javascript
+// Example: components/AuthButtons.js (Can be Server or Client Component)
+import { signIn, signOut } from "@/auth"; // Use server-side imports
+
+function SignInButton({ provider, children }) {
+  return (
+    <form
+      action={async () => {
+        "use server"; // Mark the inline function as a Server Action
+        await signIn(provider); // Pass provider ID (e.g., 'google', 'credentials')
+      }}
+    >
+      <button type="submit">{children}</button>
+    </form>
+  );
+}
+
+function SignOutButton({ children }) {
+  return (
+    <form
+      action={async () => {
+        "use server";
+        await signOut(); // Optional: { redirectTo: '/login' }
+      }}
+    >
+      <button type="submit">{children}</button>
+    </form>
+  );
+}
+
+// Example Usage (e.g., in your Header component)
+export function Header() {
+  // const session = await auth(); // Fetch session if needed server-side
+
+  return (
+    <nav>
+      {/* Conditionally render buttons based on session */}
+      {/* {!session ? ( */}
+      <SignInButton provider="google">Sign in with Google</SignInButton>
+      {/* Add sign in button for credentials if needed */}
+      {/* ) : ( */}
+      <SignOutButton>Sign Out</SignOutButton>
+      {/* )} */}
+    </nav>
+  );
+}
+```
+
+**b) Using Client Components (`onClick`)**
+
+Import `signIn` and `signOut` from `next-auth/react`.
+
+```javascript
+// Example: components/ClientAuthButtons.js (Client Component)
+"use client";
+
+import { signIn, signOut, useSession } from "next-auth/react";
+
+export default function ClientAuthButtons() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") {
+    return <p>Loading auth state...</p>;
+  }
+
+  return (
+    <div>
+      {status === "authenticated" ? (
+        <>
+          <span>Hi, {session.user?.name}!</span>
+          <button onClick={() => signOut()}>Sign Out</button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => signIn("google")}>Sign in with Google</button>
+          {/* Add other provider sign-in buttons */}
+        </>
+      )}
+    </div>
+  );
+}
+```
+
+### 11. Best Practices
+
+- **`AUTH_SECRET`**: Always use a strong, unique secret, especially in production. Do not commit it to version control.
+- **HTTPS**: Use HTTPS in production for secure cookie transmission.
+- **CSRF Protection**: Enabled by default for POST routes (sign-in/sign-out). No extra setup is needed.
+- **Callbacks**: Validate any data received in callbacks (e.g., from `unstable_update`). Sanitize inputs if dealing with credentials.
+- **Environment Variables**: Keep secrets out of your code. Use the `AUTH_` prefix convention.
+- **Middleware**: Use the `matcher` effectively to avoid running middleware on unnecessary routes (like static assets). Rely on the `authorized` callback for access control logic.
+- **Adapters**: If using a database, choose an official adapter or ensure your custom adapter follows the required interface. Keep adapter logic outside `auth.config.js`.
 
 ---
 
-### 3. Step-by-Step Migration Guide
-
-#### Step 1: Upgrade Next.js and Install Auth.js v5
-
-1. **Upgrade Next.js**:
-   Ensure your Next.js version is at least 14.0 (preferably 15 for latest features). Update your dependencies in `package.json`:
-
-   ```json
-   {
-     "dependencies": {
-       "next": "latest",
-       "react": "latest",
-       "react-dom": "latest"
-     }
-   }
-   ```
-
-   Run:
-
-   ```bash
-   npm install
-   ```
-
-2. **Install Auth.js v5**:
-   Auth.js v5 is in beta, so install the beta tag. Remove the old `next-auth` package if present.
-
-   ```bash
-   npm uninstall next-auth
-   npm install @auth/core@beta
-   ```
-
-   If using a database adapter (e.g., Prisma), install the appropriate adapter:
-
-   ```bash
-   npm install @auth/prisma-adapter
-   ```
-
-3. **Update Environment Variables**:
-   Ensure your `.env` file includes necessary variables. Example:
-   ```env
-   NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=your-secret-key
-   GOOGLE_CLIENT_ID=your-google-client-id
-   GOOGLE_CLIENT_SECRET=your-google-client-secret
-   DATABASE_URL=your-database-url
-   ```
-   Generate a `NEXTAUTH_SECRET` using:
-   ```bash
-   openssl rand -base64 32
-   ```
-
-#### Step 2: Set Up the Auth.js Configuration
-
-In Auth.js v5, the configuration is centralized in a single file at the project root, typically `auth.js`. This replaces the old `pages/api/auth/[...nextauth].js`.
-
-1. **Create `auth.js`**:
-   At the root of your project, create `auth.js`:
-
-   ```javascript
-   import { PrismaAdapter } from "@auth/prisma-adapter";
-   import GoogleProvider from "@auth/core/providers/google";
-   import { prisma } from "./lib/prisma"; // Your Prisma client
-
-   export const authConfig = {
-     adapter: PrismaAdapter(prisma), // Optional, for database sessions
-     providers: [
-       GoogleProvider({
-         clientId: process.env.GOOGLE_CLIENT_ID,
-         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-       }),
-     ],
-     secret: process.env.NEXTAUTH_SECRET,
-     callbacks: {
-       async session({ session, user }) {
-         session.user.id = user.id; // Add user ID to session
-         return session;
-       },
-     },
-     pages: {
-       signIn: "/auth/signin", // Custom sign-in page
-     },
-   };
-
-   export const { handlers, auth, signIn, signOut } = Auth(authConfig);
-   ```
-
-   - **Providers**: Configure your authentication providers (e.g., Google, Credentials). See [Auth.js Providers](https://authjs.dev/reference/core/providers/) for details.
-   - **Adapter**: Use an adapter (e.g., PrismaAdapter) for database-backed sessions. Omit if using JWT sessions.
-   - **Callbacks**: Customize session data, e.g., adding `user.id`.
-   - **Exported Functions**: `handlers`, `auth`, `signIn`, and `signOut` are used throughout the app.
-
-2. **Set Up Prisma (Optional)**:
-   If using a database, ensure your Prisma schema includes the Auth.js models. Example `schema.prisma`:
-
-   ```prisma
-   model User {
-     id            String    @id @default(uuid())
-     name          String?
-     email         String?   @unique
-     emailVerified DateTime?
-     image         String?
-     accounts      Account[]
-     sessions      Session[]
-   }
-
-   model Account {
-     id                String  @id @default(uuid())
-     userId            String
-     type              String
-     provider          String
-     providerAccountId String
-     refresh_token     String?
-     access_token      String?
-     expires_at        Int?
-     token_type        String?
-     scope             String?
-     id_token          String?
-     session_state     String?
-     user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-     @@unique([provider, providerAccountId])
-   }
-
-   model Session {
-     id           String   @id @default(uuid())
-     sessionToken String   @unique
-     userId       String
-     expires      DateTime
-     user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-   }
-
-   model VerificationToken {
-     identifier String
-     token      String   @unique
-     expires    DateTime
-     @@unique([identifier, token])
-   }
-   ```
-
-   Run `npx prisma migrate dev` to apply the schema.
-
-#### Step 3: Create Route Handlers for Authentication
-
-Auth.js v5 uses Route Handlers in the App Router instead of the old API route.
-
-1. **Create Route Handler**:
-   In `app/api/auth/[...auth]/route.js`, set up the dynamic route:
-
-   ```javascript
-   import { handlers } from "../../../../auth";
-
-   export const { GET, POST } = handlers;
-   ```
-
-   This handles all authentication routes (e.g., `/api/auth/signin`, `/api/auth/callback/google`).
-
-2. **Verify Route**:
-   Test the sign-in route by visiting `http://localhost:3000/api/auth/signin`. It should display the default Auth.js sign-in page or redirect to your provider.
-
-#### Step 4: Implement Session Management
-
-Auth.js v5 simplifies session management with the `auth()` function for server-side checks and `useSession` for client-side.
-
-1. **Server-Side Session Check (Server Component)**:
-   In a Server Component, e.g., `app/dashboard/page.js`:
-
-   ```javascript
-   import { auth } from "../../auth";
-   import { redirect } from "next/navigation";
-
-   export default async function DashboardPage() {
-     const session = await auth();
-     if (!session) {
-       redirect("/auth/signin");
-     }
-     return (
-       <div>
-         <h1>Welcome, {session.user.name}</h1>
-       </div>
-     );
-   }
-   ```
-
-   - `auth()` retrieves the session securely on the server.
-   - Redirect unauthenticated users to a custom sign-in page.
-
-2. **Custom Sign-In Page**:
-   Create `app/auth/signin/page.js` for a custom sign-in UI:
-
-   ```javascript
-   import { signIn } from "../../../auth";
-
-   export default function SignInPage() {
-     async function handleSignIn(formData) {
-       "use server";
-       await signIn("google", { redirectTo: "/dashboard" });
-     }
-
-     return (
-       <form action={handleSignIn}>
-         <button type="submit">Sign in with Google</button>
-       </form>
-     );
-   }
-   ```
-
-   - Uses Server Actions for secure form submissions.
-   - Redirects to `/dashboard` after successful sign-in.
-
-#### Step 5: Protect Routes with Middleware
-
-Use Next.js Middleware to protect routes or perform optimistic authorization checks.
-
-1. **Create Middleware**:
-   In `middleware.js` at the project root:
-
-   ```javascript
-   import { auth } from "./auth";
-   import { NextResponse } from "next/server";
-
-   export default auth(async function middleware(req) {
-     const session = await auth();
-     const isProtectedRoute = req.nextUrl.pathname.startsWith("/dashboard");
-
-     if (isProtectedRoute && !session) {
-       return NextResponse.redirect(new URL("/auth/signin", req.url));
-     }
-     return NextResponse.next();
-   });
-
-   export const config = {
-     matcher: ["/dashboard/:path*"],
-   };
-   ```
-
-   - Protects `/dashboard` and its subroutes.
-   - Redirects unauthenticated users to `/auth/signin`.
-
-2. **Edge Runtime Consideration**:
-   If using Edge runtime, ensure your database/ORM (e.g., Prisma) supports it. Alternatively, use JWT sessions or a compatible ORM.
-
-#### Step 6: Handle Client-Side Authentication
-
-For client-side components, use the `SessionProvider` and `useSession` hook.
-
-1. **Wrap App with SessionProvider**:
-   In `app/layout.js`, wrap your app with `SessionProvider`. Since it’s a Client Component, mark it with `"use client"`:
-
-   ```javascript
-   "use client";
-   import { SessionProvider } from "@auth/core/react";
-
-   export default function RootLayout({ children }) {
-     return (
-       <html lang="en">
-         <body>
-           <SessionProvider>{children}</SessionProvider>
-         </body>
-       </html>
-     );
-   }
-   ```
-
-   - **Note**: `SessionProvider` cannot be in a Server Component, so place it in a Client Component or a separate layout.
-
-2. **Use `useSession` in Client Components**:
-   Example in `app/profile/page.js`:
-
-   ```javascript
-   "use client";
-   import { useSession, signOut } from "@auth/core/react";
-
-   export default function ProfilePage() {
-     const { data: session } = useSession();
-
-     if (!session) {
-       return <p>Please sign in</p>;
-     }
-
-     return (
-       <div>
-         <p>Logged in as {session.user.name}</p>
-         <button onClick={() => signOut({ callbackUrl: "/auth/signin" })}>
-           Sign out
-         </button>
-       </div>
-     );
-   }
-   ```
-
-#### Step 7: Migrate from Older NextAuth.js Versions
-
-Since you’ve used an older version (likely v3 or v4), here’s how to migrate:
-
-1. **From v3 to v4 (if applicable)**:
-
-   - **Adapters**: Replace legacy adapters (e.g., `prisma-legacy`) with new ones (e.g., `@next-auth/prisma-adapter`).
-   - **Imports**: Update imports:
-     - `import jwt from "next-auth/jwt"` → `import { getToken } from "next-auth/jwt"`
-     - `import { useSession } from "next-auth/client"` → `import { useSession } from "next-auth/react"`
-   - **Database Schema**: If using a database, migrate the schema to v4’s model (similar to the Prisma schema above). See [v4 Migration Guide](https://next-auth.js.org/getting-started/upgrade-v4) for details.
-   - **Callbacks**: Update callback signatures to named parameters:
-     ```javascript
-     // v3
-     async jwt(token, user, account) { ... }
-     // v4
-     async jwt({ token, user, account }) { ... }
-     ```
-
-2. **From v4 to v5**:
-
-   - **Remove Old API Route**: Delete `pages/api/auth/[...nextauth].js` and replace with `app/api/auth/[...auth]/route.js` (Step 3).
-   - **Centralize Configuration**: Move `authOptions` to `auth.js` (Step 2).
-   - **Update Session Retrieval**:
-
-     - Replace `getServerSession` with `auth()` in Server Components and Route Handlers.
-     - Example (v4):
-
-       ```javascript
-       import { getServerSession } from "next-auth/next";
-       import { authOptions } from "../api/auth/[...nextauth]";
-
-       export default async function handler(req, res) {
-         const session = await getServerSession(req, res, authOptions);
-         res.json({ session });
-       }
-       ```
-
-       Example (v5):
-
-       ```javascript
-       import { auth } from "../../../auth";
-
-       export async function GET(req) {
-         const session = await auth();
-         return Response.json({ session });
-       }
-       ```
-
-   - **OAuth Providers**: Check for breaking changes due to stricter OAuth compliance. Test each provider (e.g., Google) and update configurations if needed. See [Auth.js v5 Migration Guide](https://authjs.dev/getting-started/migrating-to-v5).
-   - **Middleware**: Replace `next-auth/middleware` with the new `auth` middleware approach (Step 5).
-
-3. **Database Migration**:
-   If using a database, ensure the schema matches Auth.js v5 requirements (see Prisma schema in Step 2). Run migrations to update tables like `User`, `Account`, `Session`, and `VerificationToken`.
-
-#### Step 8: Testing and Debugging
-
-1. **Test Authentication Flow**:
-
-   - Sign in with each provider (e.g., Google).
-   - Verify session data in Server Components and client-side components.
-   - Test protected routes via Middleware.
-   - Check sign-out and session expiration.
-
-2. **Debug Common Issues**:
-
-   - **Session Not Found**: Ensure `NEXTAUTH_SECRET` is set and matches across environments.
-   - **Provider Errors**: Verify client ID/secret and callback URLs in your provider’s dashboard.
-   - **Middleware Issues**: Check `matcher` config and ensure Edge compatibility.
-
-3. **Logging**:
-   Enable debug mode in `auth.js`:
-   ```javascript
-   export const authConfig = {
-     // ...other config
-     debug: process.env.NODE_ENV === "development",
-   };
-   ```
+## Migration Guide: NextAuth.js v4 to v5 (Auth.js)
+
+Migrating from v4 involves several structural changes:
+
+1.  **Package Name:**
+
+    - Replace `next-auth` with `@auth/nextjs` in your `package.json`. You might still need `next-auth` for React components (`next-auth/react`). Run `npm install @auth/nextjs` and potentially `npm uninstall next-auth` followed by `npm install next-auth` if you encounter issues, or just update versions.
+
+2.  **API Route:**
+
+    - **v4:** `pages/api/auth/[...nextauth].js` exporting `NextAuth(authOptions)`.
+    - **v5:** `app/api/auth/[...nextauth]/route.js` exporting `GET` and `POST` handlers from `import { handlers } from '@/auth'`.
+
+3.  **Configuration File:**
+
+    - **v4:** Typically a single `authOptions` object passed to `NextAuth` in the API route file.
+    - **v5:** Split into `auth.config.js` (serializable, for middleware) and `auth.js` (main config, providers, adapters). The main `NextAuth` call is now in `auth.js`, exporting handlers and helpers. Move providers, adapters, detailed callbacks, and session strategy to `auth.js`. Move `pages` config and the `authorized` callback (if used for route protection) to `auth.config.js`.
+
+4.  **Getting Session Data (Server-Side):**
+
+    - **v4:** `import { getServerSession } from 'next-auth/next';` and `const session = await getServerSession(req, res, authOptions);` (in Pages Router `getServerSideProps` or API routes).
+    - **v5 (App Router):** `import { auth } from '@/auth';` and `const session = await auth();` (directly in async Server Components or Route Handlers).
+
+5.  **Getting Session Data (Client-Side):**
+
+    - **v4/v5:** `import { useSession } from 'next-auth/react';` and `import { SessionProvider } from 'next-auth/react';`. The usage of `useSession` remains similar. The main difference is setting up the `SessionProvider` context for the App Router, typically by wrapping the root layout's children in a client component wrapper as shown above.
+
+6.  **Middleware:**
+
+    - **v4:** Often used `getToken` and manual checks, or the `withAuth` HOF.
+    - **v5:** Create `middleware.js`. Import `auth` from `@/auth` (or `NextAuth(authConfig)`). Export `auth` directly as `middleware`. Define protected routes using the `config.matcher`. Use the `callbacks.authorized` in `auth.config.js` for authorization logic.
+
+7.  **Environment Variables:**
+
+    - **v4:** Prefixed with `NEXTAUTH_` (e.g., `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_ID`).
+    - **v5:** Prefixed with `AUTH_` (e.g., `AUTH_URL`, `AUTH_SECRET`). Provider variables are inferred if named `AUTH_{PROVIDER}_ID` / `AUTH_{PROVIDER}_SECRET`.
+
+8.  **Adapters:**
+
+    - Import paths may change (e.g., `@next-auth/prisma-adapter` -> `@auth/prisma-adapter`). Check the Auth.js documentation for the correct package names for your adapter. The core adapter interface is largely compatible. Install the new adapter package.
+
+9.  **Sign-in/Sign-out:**
+    - **v4 (Client):** `signIn()`, `signOut()` from `next-auth/react`.
+    - **v5 (Client):** Same imports and usage from `next-auth/react`.
+    - **v5 (Server Actions):** Import `signIn`, `signOut` from `@/auth` and use within server actions.
+
+**Example Migration Steps:**
+
+1.  Update dependencies in `package.json`.
+2.  Create `auth.config.js` and move relevant serializable options (like `pages`, `callbacks.authorized`).
+3.  Create `auth.js`, import `authConfig`, add providers, adapter, session strategy, and detailed callbacks (`jwt`, `session`). Export `handlers`, `auth`, `signIn`, `signOut`.
+4.  Delete `pages/api/auth/[...nextauth].js`.
+5.  Create `app/api/auth/[...nextauth]/route.js` and export `handlers`.
+6.  Create `middleware.js` and set up protection using `export default auth` and `config.matcher`.
+7.  Update server-side session fetching from `getServerSession` to `await auth()`.
+8.  Ensure `SessionProvider` is set up correctly for client components in `app/layout.js`.
+9.  Rename environment variables from `NEXTAUTH_` to `AUTH_`. Update provider variable names if necessary for auto-inference.
+10. Update adapter import paths if used.
 
 ---
 
-### 4. Best Practices for Auth.js v5 with Next.js App Router
-
-- **Use Server Components for Auth Checks**: Perform session checks in Server Components to reduce client-side JavaScript and improve security.[](https://dev.to/shieldstring/nextjs-15-authentication-1al7)
-- **Leverage Server Actions**: Use Server Actions for login/logout forms to keep sensitive logic on the server.[](https://nextjs.org/docs/app/guides/authentication)
-- **Secure Cookies**: Use stateless sessions with secure, HTTP-only cookies. If using a database, prefer encrypted session IDs.[](https://nextjs.org/docs/pages/guides/authentication)
-- **Middleware for Authorization**: Use Middleware for optimistic checks (e.g., redirecting unauthenticated users) but validate sensitive operations on the server.[](https://nextjs.org/docs/app/building-your-application/routing/middleware)
-- **Environment Variables**: Use `NEXT_PUBLIC_` prefix only for client-exposed variables. Keep secrets like `NEXTAUTH_SECRET` private.[](https://nextjs.org/docs/app/guides/migrating/from-create-react-app)
-- **Edge Compatibility**: If deploying to Vercel Edge, ensure your database/ORM supports Edge runtime or use JWT sessions.[](https://authjs.dev/getting-started/migrating-to-v5)
-- **Custom Pages**: Always implement custom sign-in/sign-out pages for better UX and branding.[](https://nextjs.org/docs/pages/guides/authentication)
-- **Testing**: Test OAuth flows in staging environments, as rate limits differ between development and production.[](https://developer.auth0.com/resources/guides/web-app/nextjs/basic-authentication)
-
----
-
-### 5. Common Pitfalls and Troubleshooting
-
-- **Error: “Invalid compact JWE”**:
-  - Cause: Mismatched `NEXTAUTH_SECRET`.
-  - Fix: Ensure `NEXTAUTH_SECRET` is consistent across environments.
-- **OAuth Callback Errors**:
-  - Cause: Incorrect callback URL in provider settings.
-  - Fix: Set callback URL to `http://localhost:3000/api/auth/callback/<provider>` in development and update for production.
-- **Session Not Persisting**:
-  - Cause: `SessionProvider` not wrapping client-side components.
-  - Fix: Ensure `SessionProvider` is in `app/layout.js` or a Client Component.
-- **Edge Runtime Errors**:
-  - Cause: Incompatible database/ORM.
-  - Fix: Use JWT sessions or an Edge-compatible ORM (e.g., Drizzle). Check provider documentation.[](https://authjs.dev/getting-started/migrating-to-v5)
-- **Middleware Redirect Loops**:
-  - Cause: Incorrect `matcher` config or session check logic.
-  - Fix: Verify `matcher` paths and ensure `auth()` returns expected session data.
-
----
-
-### 6. Additional Resources
-
-- **Official Auth.js Documentation**: [authjs.dev](https://authjs.dev)
-- **Auth.js v5 Migration Guide**: [Migrating to v5](https://authjs.dev/getting-started/migrating-to-v5)[](https://authjs.dev/getting-started/migrating-to-v5)
-- **Next.js Authentication Guide**: [nextjs.org/docs/guides/authentication](https://nextjs.org/docs/app/building-your-application/authentication)[](https://nextjs.org/docs/pages/guides/authentication)
-- **Next.js 15 Upgrade Guide**: [nextjs.org/docs/app/building-your-application/upgrading](https://nextjs.org/docs/app/building-your-application/upgrading)[](https://nextjs.org/blog/next-15)
-- **Example Project**: Check [Auth.js Next.js Example](https://github.com/nextauthjs/next-auth-example) or the template by @steventey on X.
-
----
-
-This guide provides a comprehensive path to migrate from an older NextAuth.js version to Auth.js v5 in a Next.js App Router project without TypeScript. By following these steps, you’ll leverage modern Next.js features like Server Components and Server Actions while adhering to Auth.js best practices. If you encounter specific issues or need further customization (e.g., adding Credentials provider), let me know, and I can provide tailored guidance!
+This guide provides a solid foundation for using Auth.js v5 with the Next.js App Router in JavaScript. Remember to consult the official Auth.js documentation (authjs.dev) for the most up-to-date information, advanced configurations, and provider-specific details.

@@ -1,621 +1,537 @@
-Below is a comprehensive migration guide for integrating the **latest version of TanStack Query** (v5 as of May 2025) into a **Next.js App Router** project without TypeScript, focusing on best practices and addressing changes from older versions (e.g., v3 or v4). This guide assumes you have prior experience with an older version of TanStack Query (React Query) and are familiar with Next.js. It covers setup, migration steps, key changes, and best practices tailored for a modern Next.js App Router setup using JavaScript.
+# TanStack Query (v5) Migration Guide for Next.js App Router (JavaScript)
+
+**Current Date:** Sunday, May 4, 2025
 
 ---
 
-## Migration Guide: Integrating TanStack Query v5 with Next.js App Router (No TypeScript)
+### 1. Introduction
 
-### 1. Overview of TanStack Query v5
-
-TanStack Query v5 is a major version with significant improvements over v3 and v4, including better support for React Server Components, suspense, and streamlined APIs. It’s designed to work seamlessly with Next.js App Router, leveraging Server Components for data fetching while maintaining client-side caching and state management. Key changes include:
-
-- **Single signature for hooks**: `useQuery` and related hooks now use a single object-based signature.
-- **Suspense stability**: New hooks like `useSuspenseQuery` for stable suspense support.
-- **React 18+ requirement**: Uses `useSyncExternalStore` for better state synchronization.
-- **Improved Server Component integration**: Optimized for Next.js App Router with streaming and hydration.
-
-This guide will help you migrate from an older version (v3/v4) to v5, set up TanStack Query in your Next.js project, and follow best practices.
-
----
+TanStack Query (formerly React Query) is a powerful library for fetching, caching, synchronizing, and updating server state in your React applications. It significantly simplifies data fetching logic, eliminates boilerplate code, and provides features like caching, automatic refetching, stale-while-revalidate, and more, out-of-the-box. Version 5 brings refinements and works effectively with the Next.js App Router architecture.
 
 ### 2. Prerequisites
 
-Before starting, ensure your project meets these requirements:
+- A Next.js project (version 13.4 or later) using the App Router.
+- Node.js installed.
+- You are using JavaScript (`.js` or `.jsx` files).
 
-- **Next.js**: Latest version (Next.js 15 as of May 2025) with App Router enabled.
-- **React**: Version 18 or later (Next.js 15 supports React 19, but React 18 is sufficient).
-- **Node.js**: Latest LTS version.
-- **No TypeScript**: This guide uses JavaScript (`.js` files).
+### 3. Installation
 
----
+Install TanStack Query and its dedicated DevTools:
 
-### 3. Setup TanStack Query v5 in Next.js App Router
+```bash
+npm install @tanstack/react-query @tanstack/react-query-devtools
+# or
+yarn add @tanstack/react-query @tanstack/react-query-devtools
+# or
+pnpm add @tanstack/react-query @tanstack/react-query-devtools
+# or
+bun add @tanstack/react-query @tanstack/react-query-devtools
+```
 
-#### Step 1: Install Dependencies
+### 4. Core Setup: QueryClient and Provider
 
-1. Install the latest version of TanStack Query and related packages:
+You need to create a `QueryClient` instance and provide it to your application using `QueryClientProvider`. Since the provider uses React Context, it must be within a Client Component.
 
-   ```bash
-   npm install @tanstack/react-query
-   ```
+**a) Create the Provider Wrapper (Client Component)**
 
-   Optionally, install the devtools for debugging:
-
-   ```bash
-   npm install @tanstack/react-query-devtools
-   ```
-
-2. Verify the installed version:
-   ```bash
-   npm list @tanstack/react-query
-   ```
-   As of May 2025, you should see `@tanstack/react-query@5.x.x`.
-
-#### Step 2: Set Up QueryClientProvider
-
-TanStack Query requires a `QueryClientProvider` to manage the query client. Since Next.js App Router uses Server Components by default, you’ll need to create a client component for the provider.
-
-1. Create a `providers.js` file in your `app` directory:
-
-   ```javascript
-   // app/providers.js
-   "use client";
-
-   import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-   import { useState } from "react";
-
-   export default function Providers({ children }) {
-     const [queryClient] = useState(() => new QueryClient());
-
-     return (
-       <QueryClientProvider client={queryClient}>
-         {children}
-       </QueryClientProvider>
-     );
-   }
-   ```
-
-   - `"use client"` ensures this is a Client Component, as `QueryClientProvider` uses React hooks.
-   - `useState` ensures the `QueryClient` persists across renders.
-
-2. Wrap your app with the `Providers` component in the root layout:
-
-   ```javascript
-   // app/layout.js
-   import Providers from "./providers";
-
-   export default function RootLayout({ children }) {
-     return (
-       <html lang="en">
-         <body>
-           <Providers>{children}</Providers>
-         </body>
-       </html>
-     );
-   }
-   ```
-
-#### Step 3: (Optional) Add DevTools
-
-For debugging, integrate the Query DevTools:
+Create a new file, for example `components/ReactQueryProvider.js`:
 
 ```javascript
-// app/providers.js
-"use client";
+// components/ReactQueryProvider.js
+"use client"; // This directive is essential
 
+import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useState } from "react";
 
-export default function Providers({ children }) {
-  const [queryClient] = useState(() => new QueryClient());
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        // With SSR, we usually want to set some default staleTime
+        // above 0 to avoid refetching immediately on the client
+        staleTime: 60 * 1000, // 1 minute
+        // gcTime: 1000 * 60 * 60 * 24, // 24 hours (Example: longer garbage collection time)
+      },
+    },
+  });
+}
+
+// Store the client so we don't recreate it on every render
+let browserQueryClient = undefined;
+
+function getQueryClient() {
+  if (typeof window === "undefined") {
+    // Server: always make a new query client
+    return makeQueryClient();
+  } else {
+    // Browser: make a new query client if we don't already have one
+    // This is very important so we don't re-make a new client if React
+    // suspends during the initial render. This may not be needed if we
+    // have a suspense boundary BELOW the creation of the query client
+    if (!browserQueryClient) browserQueryClient = makeQueryClient();
+    return browserQueryClient;
+  }
+}
+
+// Component using useState to ensure client is only created once
+export default function ReactQueryProvider({ children }) {
+  // NOTE: Avoid useState when using SSR and hydration, it may mess up hydration
+  // const [queryClient] = React.useState(() => new QueryClient({ ... default options ... }));
+
+  // Instead, use the singleton pattern documented by TanStack Query
+  const queryClient = getQueryClient();
 
   return (
     <QueryClientProvider client={queryClient}>
       {children}
+      {/* Devtools are placed inside the provider */}
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }
 ```
 
-- The devtools will appear in development mode and help you inspect queries and mutations.
+- **`staleTime`**: Setting a default `staleTime > 0` is crucial when prefetching data on the server. It tells React Query how long the fetched data is considered "fresh", preventing an automatic refetch immediately after the component hydrates on the client.
+- **`gcTime`**: (Garbage Collection Time, formerly `cacheTime`) How long inactive query data stays in memory. Defaults to 5 minutes.
+- **Singleton `QueryClient`**: The `getQueryClient` function ensures that on the server, a new client is created for each request, while in the browser, a single client instance is reused across renders to maintain the cache.
 
----
+**b) Integrate Provider in Root Layout**
 
-### 4. Migrating from Older Versions (v3/v4) to v5
-
-#### Breaking Changes and Migration Steps
-
-TanStack Query v5 introduces several breaking changes compared to v3 and v4. Below are the key changes and how to address them in your JavaScript project.
-
-1. **Package Name Change (v3 to v4+)**
-
-   - **Old (v3)**: `react-query`
-   - **New (v4+)**: `@tanstack/react-query`
-   - **Action**:
-     Update your imports:
-
-     ```javascript
-     // Old (v3)
-     import { useQuery, QueryClient } from "react-query";
-
-     // New (v5)
-     import { useQuery, QueryClient } from "@tanstack/react-query";
-     ```
-
-     Uninstall the old package and install the new one:
-
-     ```bash
-     npm uninstall react-query
-     npm install @tanstack/react-query
-     ```
-
-2. **Single Signature for Hooks (v5)**
-
-   - **Old (v3/v4)**: `useQuery` supported multiple signatures (e.g., `useQuery(queryKey, queryFn, options)`).
-   - **New (v5)**: Only one object-based signature: `useQuery({ queryKey, queryFn, ...options })`.
-   - **Action**:
-     Update all `useQuery` calls:
-
-     ```javascript
-     // Old (v3/v4)
-     const { data } = useQuery("todos", () => fetch("/api/todos"));
-
-     // New (v5)
-     const { data } = useQuery({
-       queryKey: ["todos"],
-       queryFn: () => fetch("/api/todos").then((res) => res.json()),
-     });
-     ```
-
-     Similarly, update `useMutation` and other hooks:
-
-     ```javascript
-     // Old (v3/v4)
-     const mutation = useMutation((newTodo) => post("/api/todos", newTodo));
-
-     // New (v5)
-     const mutation = useMutation({
-       mutationFn: (newTodo) => post("/api/todos", newTodo),
-     });
-     ```
-
-3. **Query Keys as Arrays (v4+)**
-
-   - **Old (v3)**: Query keys could be strings or arrays.
-   - **New (v4+)**: Query keys must be arrays for consistency.
-   - **Action**:
-     Convert string-based query keys to arrays:
-
-     ```javascript
-     // Old (v3)
-     useQuery("todos", queryFn);
-
-     // New (v5)
-     useQuery({ queryKey: ["todos"], queryFn });
-     ```
-
-4. **isLoading and isInitialLoading (v5)**
-
-   - **Old (v4)**: `isLoading` indicated the initial loading state.
-   - **New (v5)**: `isLoading` is now `isPending && isFetching`. `isInitialLoading` is deprecated and will be removed in v6.
-   - **Action**:
-     Use `isPending` for checking if a query is in its initial loading state:
-
-     ```javascript
-     // Old (v4)
-     if (isLoading) return "Loading...";
-
-     // New (v5)
-     if (isPending) return "Loading...";
-     ```
-
-5. **Suspense Support (v5)**
-
-   - **Old (v4)**: Suspense was experimental with a `suspense: true` option.
-   - **New (v5)**: Dedicated hooks (`useSuspenseQuery`, `useSuspenseInfiniteQuery`) for suspense. The `suspense` option is removed.
-   - **Action**:
-     Replace `suspense: true` with `useSuspenseQuery`:
-
-     ```javascript
-     // Old (v4)
-     const { data } = useQuery({
-       queryKey: ["todos"],
-       queryFn,
-       suspense: true,
-     });
-
-     // New (v5)
-     const { data } = useSuspenseQuery({
-       queryKey: ["todos"],
-       queryFn,
-     });
-     ```
-
-     Ensure your component is wrapped in a `<Suspense>` boundary:
-
-     ```javascript
-     import { Suspense } from "react";
-
-     function Todos() {
-       const { data } = useSuspenseQuery({
-         queryKey: ["todos"],
-         queryFn: () => fetch("/api/todos").then((res) => res.json()),
-       });
-
-       return (
-         <div>
-           {data.map((todo) => (
-             <p>{todo.title}</p>
-           ))}
-         </div>
-       );
-     }
-
-     export default function Page() {
-       return (
-         <Suspense fallback={<div>Loading...</div>}>
-           <Todos />
-         </Suspense>
-       );
-     }
-     ```
-
-6. **Query Removal (v5)**
-
-   - **Old (v4)**: `query.remove()` was used to remove a query.
-   - **New (v5)**: Use `queryClient.removeQueries({ queryKey })`.
-   - **Action**:
-     Update query removal logic:
-
-     ```javascript
-     // Old (v4)
-     query.remove();
-
-     // New (v5)
-     queryClient.removeQueries({ queryKey: ["todos"] });
-     ```
-
-7. **Undefined Cache Values (v4+)**
-
-   - **Old (v3)**: Returning `undefined` from `queryFn` was allowed.
-   - **New (v4+)**: `undefined` is invalid and will throw an error.
-   - **Action**:
-     Ensure `queryFn` returns a valid value or handles errors:
-
-     ```javascript
-     // Old (v3)
-     const { data } = useQuery({
-       queryKey: ["todos"],
-       queryFn: () => {
-         // Could return undefined
-       },
-     });
-
-     // New (v5)
-     const { data } = useQuery({
-       queryKey: ["todos"],
-       queryFn: async () => {
-         const res = await fetch("/api/todos");
-         if (!res.ok) throw new Error("Failed to fetch");
-         return res.json();
-       },
-     });
-     ```
-
-8. **React 18+ Requirement (v5)**
-   - **Old (v4)**: Worked with React 17 using a shim for `useSyncExternalStore`.
-   - **New (v5)**: Requires React 18+ for `useSyncExternalStore`.
-   - **Action**:
-     Ensure your Next.js project uses React 18 or later. Next.js 15 supports React 18 and 19, so you’re likely compliant. Verify in `package.json`:
-     ```json
-     "dependencies": {
-       "react": "^18.2.0",
-       "next": "^15.0.0"
-     }
-     ```
-
-#### Running Codemods for Automated Migration
-
-TanStack Query provides codemods to automate some migration tasks (e.g., updating imports and hook signatures). Since you’re using JavaScript, run the v5 codemod:
-
-```bash
-npx jscodeshift ./app \
-  --extensions=js,jsx \
-  --transform=./node_modules/@tanstack/react-query/build/codemods/src/v5/remove-overloads/remove-overloads.cjs
-```
-
-- Review the changes carefully, as codemods may not catch all edge cases.
-- Run `prettier` or `eslint` afterward to fix formatting:
-  ```bash
-  npx prettier --write ./app
-  ```
-
----
-
-### 5. Best Practices for TanStack Query v5 with Next.js App Router
-
-#### 1. Leverage Server Components for Initial Data Fetching
-
-Next.js App Router’s Server Components are ideal for prefetching data on the server, reducing client-side JavaScript. Use TanStack Query to hydrate this data on the client.
-
-Example:
+Import and use the `ReactQueryProvider` in your root `app/layout.js`:
 
 ```javascript
-// app/page.js
-import { dehydrate, Hydrate } from "@tanstack/react-query";
-import { getQueryClient } from "./getQueryClient";
-import Todos from "./todos";
+// app/layout.js
+import ReactQueryProvider from "@/components/ReactQueryProvider";
+// Import global styles, fonts etc.
+import "./globals.css";
 
-async function getTodos() {
-  const res = await fetch("https://api.example.com/todos");
-  return res.json();
-}
+export const metadata = {
+  title: "My TanStack Query App",
+  description: "Data fetching example",
+};
 
-export default async function Page() {
-  const queryClient = getQueryClient();
-  await queryClient.prefetchQuery({
-    queryKey: ["todos"],
-    queryFn: getTodos,
-  });
-  const dehydratedState = dehydrate(queryClient);
-
+export default function RootLayout({ children }) {
   return (
-    <Hydrate state={dehydratedState}>
-      <Todos />
-    </Hydrate>
+    <html lang="en">
+      <body>
+        <ReactQueryProvider>
+          {" "}
+          {/* Wrap your app */}
+          {/* Other layout elements like Header, Footer */}
+          <main>{children}</main>
+        </ReactQueryProvider>
+      </body>
+    </html>
   );
 }
-
-// app/getQueryClient.js
-import { QueryClient } from "@tanstack/react-query";
-import { cache } from "react";
-
-export const getQueryClient = cache(() => new QueryClient());
 ```
 
+### 5. Basic Usage (Client Components)
+
+Use hooks like `useQuery` and `useMutation` within Client Components (`'use client'`).
+
+**a) `useQuery` for Fetching Data**
+
 ```javascript
-// app/todos.js
+// components/PostList.js
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
 
-export default function Todos() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ["todos"],
-    queryFn: () =>
-      fetch("https://api.example.com/todos").then((res) => res.json()),
+// Define your data fetching function
+async function fetchPosts() {
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=10"
+  );
+  if (!res.ok) {
+    throw new Error("Network response was not ok");
+  }
+  return res.json();
+}
+
+export default function PostList() {
+  const {
+    data: posts,
+    error,
+    isPending,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["posts"], // Unique key for this query
+    queryFn: fetchPosts, // The function to fetch data
+    // Options:
+    // staleTime: 5 * 60 * 1000, // Override default staleTime (5 minutes)
+    // refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 
-  if (isPending) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
+  // isPending: Query has no data yet, fetch is in progress (initial load or hard refresh)
+  // isLoading: Alias for isPending, kept for backward compatibility (true only on initial load without data)
+  if (isPending) {
+    return <span>Loading posts...</span>;
+  }
 
+  if (isError) {
+    return <span>Error fetching posts: {error.message}</span>;
+  }
+
+  // Render data
   return (
     <div>
-      {data.map((todo) => (
-        <p key={todo.id}>{todo.title}</p>
-      ))}
+      <h2>Posts</h2>
+      <ul>
+        {posts?.map((post) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
     </div>
   );
 }
 ```
 
-- **Why?** Prefetching in Server Components minimizes client-side fetching, and `Hydrate` ensures the client uses the prefetched data.
+- **`queryKey`**: An array used to identify and cache the query. It should be serializable and unique to the query + its parameters. A common pattern is `['entityName', { parameters }]`.
+- **`queryFn`**: An async function that fetches and returns (or throws an error) your data.
+- **States**: `isPending`, `isLoading`, `isError`, `error`, `data` provide the status and result of the query.
 
-#### 2. Use Suspense for Streaming
+**b) `useMutation` for Modifying Data**
 
-TanStack Query v5’s `useSuspenseQuery` pairs well with Next.js’s streaming and `<Suspense>` boundaries. Place suspense boundaries in your Server Components to stream content as it becomes ready.
-
-Example:
-
-```javascript
-// app/page.js
-import { Suspense } from "react";
-import Todos from "./todos";
-
-export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading todos...</div>}>
-      <Todos />
-    </Suspense>
-  );
-}
-
-// app/todos.js
-"use client";
-
-import { useSuspenseQuery } from "@tanstack/react-query";
-
-export default function Todos() {
-  const { data } = useSuspenseQuery({
-    queryKey: ["todos"],
-    queryFn: () => fetch("https://api.example.com/todos").then((res) => res.json()),
-  });
-
-  return (
-    <div>
-      {data.map((todo) => (
-        <p key={todo.id}>{todo.title}</p>
-      ))}
-    </div>
-  );
-}
-```
-
-- **Why?** Suspense enables progressive rendering, improving perceived performance.
-
-#### 3. Avoid Overusing TanStack Query
-
-If your data fetching needs are simple (e.g., static or server-only data), use Next.js’s built-in `fetch` with `cache: "force-cache"`. Reserve TanStack Query for:
-
-- Client-side caching and background updates.
-- Complex state management (e.g., pagination, infinite queries).
-- Mutations (e.g., POST requests).
-
-Example of when to use TanStack Query:
+Mutations are used for creating, updating, or deleting data.
 
 ```javascript
-// app/add-todo.js
+// components/AddPostForm.js
 "use client";
 
+import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-export default function AddTodo() {
-  const queryClient = useQueryClient();
+// Define the mutation function
+async function addPost(newPostData) {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(newPostData),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to add post");
+  }
+  return res.json();
+}
+
+export default function AddPostForm() {
+  const queryClient = useQueryClient(); // Get QueryClient instance
+  const [title, setTitle] = React.useState("");
 
   const mutation = useMutation({
-    mutationFn: (newTodo) =>
-      fetch("/api/todos", {
-        method: "POST",
-        body: JSON.stringify(newTodo),
-      }).then((res) => res.json()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+    mutationFn: addPost, // The function performing the mutation
+    onSuccess: (data) => {
+      // This runs after the mutation is successful
+      console.log("Post added:", data);
+
+      // Option 1: Invalidate the 'posts' query to trigger a refetch
+      // Good if you want the freshest data from the server
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+
+      // Option 2: Manually update the cache (Optimistic Update lite)
+      // Good if the mutation returns the created item and you want faster UI updates
+      // queryClient.setQueryData(['posts'], (oldData) => oldData ? [...oldData, data] : [data]);
+
+      setTitle(""); // Clear form
     },
+    onError: (error) => {
+      // This runs if the mutation fails
+      console.error("Error adding post:", error);
+      // Maybe show an error message to the user
+    },
+    // onSettled: () => {
+    //   // This runs after success or error
+    //   console.log('Mutation finished.');
+    // },
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const title = e.target.title.value;
-    mutation.mutate({ title });
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    mutation.mutate({ title, body: "Example body", userId: 1 }); // Call mutate with variables
   };
 
   return (
     <form onSubmit={handleSubmit}>
-      <input name="title" type="text" />
+      <h3>Add New Post</h3>
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Post title"
+        disabled={mutation.isPending} // Disable form while mutating
+      />
       <button type="submit" disabled={mutation.isPending}>
-        Add Todo
+        {mutation.isPending ? "Adding..." : "Add Post"}
       </button>
+      {mutation.isError && (
+        <p style={{ color: "red" }}>Error: {mutation.error.message}</p>
+      )}
     </form>
   );
 }
 ```
 
-- **Why?** TanStack Query excels at handling mutations and cache invalidation.
+- **`mutationFn`**: An async function performing the side effect (POST, PUT, DELETE).
+- **`mutate`**: Function to trigger the mutation, passing variables if needed.
+- **`useQueryClient`**: Hook to access the `QueryClient` instance.
+- **`queryClient.invalidateQueries`**: Marks queries matching the key as stale, triggering a refetch if they are currently rendered.
+- **`queryClient.setQueryData`**: Allows direct manipulation of the cache. Use with caution.
 
-#### 4. Optimize Query Keys
+### 6. Server Component Integration (Prefetching & Hydration)
 
-Use hierarchical query keys to manage related data:
+While you can fetch data directly in Server Components using `Workspace`, TanStack Query provides a powerful pattern for prefetching data on the server and seamlessly hydrating it on the client. This avoids client-side loading spinners for initial data and leverages React Query's caching and background update features.
 
-```javascript
-const { data } = useQuery({
-  queryKey: ["todos", userId, { status: "active" }],
-  queryFn: () =>
-    fetch(`/api/todos?userId=${userId}&status=active`).then((res) =>
-      res.json()
-    ),
-});
-```
+**a) Server-Side `QueryClient` Utility**
 
-- **Why?** Array-based keys allow partial matching for invalidation (e.g., `queryClient.invalidateQueries(["todos"])` invalidates all todo-related queries).
-
-#### 5. Handle Errors Gracefully
-
-Always handle errors in your queries and mutations:
+Create a utility to get a server-side `QueryClient` instance, using `React.cache` to ensure it's a singleton per request.
 
 ```javascript
-const { data, error, isPending } = useQuery({
-  queryKey: ["todos"],
-  queryFn: () =>
-    fetch("/api/todos").then((res) => {
-      if (!res.ok) throw new Error("Failed to fetch todos");
-      return res.json();
-    }),
-});
+// lib/getQueryClient.js
+import { QueryClient } from "@tanstack/react-query";
+import { cache } from "react";
 
-if (isPending) return <div>Loading...</div>;
-if (error) return <div>Error: {error.message}</div>;
-```
-
-#### 6. Configure QueryClient Defaults
-
-Set global defaults for queries to reduce boilerplate:
-
-```javascript
-// app/providers.js
-"use client";
-
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useState } from "react";
-
-export default function Providers({ children }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 1000 * 60 * 5, // 5 minutes
-            retry: 2,
-          },
+// Use React cache to ensure a single instance per request
+const getQueryClient = cache(
+  () =>
+    new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // Consistent default staleTime
         },
-      })
+      },
+    })
+);
+export default getQueryClient;
+```
+
+**b) Prefetching in a Server Component**
+
+In your Server Component (e.g., a page), get the `QueryClient`, prefetch the data, dehydrate the state, and pass it to a Client Component via `HydrationBoundary`.
+
+```javascript
+// app/hydrated-posts/page.js (Server Component)
+import {
+  dehydrate,
+  HydrationBoundary, // Renamed from Hydrate in v5
+} from "@tanstack/react-query";
+import getQueryClient from "@/lib/getQueryClient"; // Our server singleton utility
+import PostListClient from "./PostListClient"; // The client component that will use the data
+
+// The same fetch function used in the client component
+async function fetchPosts() {
+  console.log("Fetching posts on server...");
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=5"
   );
+  if (!res.ok) {
+    throw new Error("Network response was not ok");
+  }
+  return res.json();
+}
+
+export default async function HydratedPostsPage() {
+  const queryClient = getQueryClient();
+
+  // Prefetch the data
+  await queryClient.prefetchQuery({
+    queryKey: ["posts-hydrated"], // Use a distinct key if needed, or the same one
+    queryFn: fetchPosts,
+  });
+
+  // Dehydrate the state - gets serializable data from the cache
+  const dehydratedState = dehydrate(queryClient);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    <div>
+      <h1>Posts (Prefetched on Server)</h1>
+      {/* Pass the dehydrated state to the boundary */}
+      <HydrationBoundary state={dehydratedState}>
+        {/* Render the client component that uses useQuery with the same queryKey */}
+        <PostListClient />
+      </HydrationBoundary>
+    </div>
   );
 }
 ```
 
-- **Why?** Defaults ensure consistent behavior across queries.
+**c) Using Prefetched Data in a Client Component**
 
----
+The Client Component uses `useQuery` with the _exact same `queryKey`_ used for prefetching. React Query automatically picks up the dehydrated data, avoiding an initial fetch and loading state.
 
-### 6. Common Pitfalls and Solutions
+```javascript
+// app/hydrated-posts/PostListClient.js (Client Component)
+"use client";
 
-1. **Hydration Errors**:
+import { useQuery } from "@tanstack/react-query";
 
-   - Ensure `dehydratedState` matches the client-side query keys and data structure.
-   - Use `Hydrate` and `dehydrate` correctly, as shown in the Server Component example.
+// Define the fetch function (can be imported)
+async function fetchPosts() {
+  console.log("Fetching posts on client (should not happen initially)...");
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=5"
+  );
+  if (!res.ok) {
+    throw new Error("Network response was not ok");
+  }
+  return res.json();
+}
 
-2. **Server Component Limitations**:
+export default function PostListClient() {
+  const {
+    data: posts,
+    error,
+    isPending,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["posts-hydrated"], // <<< MUST match the key used in prefetchQuery
+    queryFn: fetchPosts,
+  });
 
-   - Avoid using TanStack Query hooks in Server Components. Use `prefetchQuery` in Server Components and hooks in Client Components.
+  // Because data is hydrated, isPending/isLoading should be false initially
+  if (isPending) {
+    return <span>Loading posts... (Should not see this on initial load)</span>;
+  }
 
-3. **Suspense Boundary Placement**:
+  if (isError) {
+    return <span>Error fetching posts: {error.message}</span>;
+  }
 
-   - Place `<Suspense>` boundaries strategically to avoid waterfalls. For example, wrap individual components rather than the entire page if only parts need suspense.
+  return (
+    <div>
+      <ul>
+        {posts?.map((post) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
 
-4. **Performance**:
-   - Avoid `queryClient.fetchQuery` in Server Components unless error handling is needed. Use `prefetchQuery` instead.
-   - Set appropriate `staleTime` and `cacheTime` to balance freshness and performance.
+### 7. Server Actions Integration (Mutations)
 
----
+You can easily integrate Next.js Server Actions with `useMutation`.
 
-### 7. Testing Your Migration
+**a) Define the Server Action**
 
-1. **Verify Imports**:
-   Ensure all imports use `@tanstack/react-query`.
+Create a file (e.g., `app/actions.js`) for your server actions.
 
-2. **Test Queries**:
-   Check that all `useQuery` calls use the object-based signature and array-based query keys.
+```javascript
+// app/actions.js
+"use server"; // Mark all functions in this file as Server Actions
 
-3. **Test Suspense**:
-   If using suspense, verify that `useSuspenseQuery` works with `<Suspense>` boundaries.
+import { revalidatePath } from "next/cache"; // Optional: For revalidating server-rendered pages
 
-4. **Check DevTools**:
-   Use the React Query DevTools to inspect queries and ensure they’re firing correctly.
+export async function createPostAction(formData) {
+  // Simulate API call / database operation
+  const title = formData.get("title");
+  console.log("Server Action: Creating post with title -", title);
 
-5. **Run Your App**:
-   Test server-side rendering, client-side hydration, and mutations to ensure no runtime errors.
+  // Example: Pretend to save to DB and get back the new post
+  await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
 
----
+  if (!title) {
+    // You can throw errors from Server Actions
+    throw new Error("Title is required");
+  }
 
-### 8. Additional Resources
+  const newPost = {
+    id: Date.now(), // Simulate ID generation
+    title: title,
+    body: "Generated by Server Action",
+    userId: 1,
+  };
 
-- **Official TanStack Query v5 Migration Guide**: https://tanstack.com/query/v5/docs/react/guides/migrating-to-v5[](https://tanstack.com/query/v5/docs/framework/react/guides/migrating-to-v5)
-- **Next.js App Router Documentation**: https://nextjs.org/docs/app[](https://nextjs.org/docs/app/guides/migrating/app-router-migration)
-- **TanStack Query with Next.js Example**: https://tanstack.com/query/v5/docs/react/examples/react/nextjs[](https://tanstack.com/query/latest/docs/framework/react/examples/nextjs)
-- **TkDodo’s Blog on React Query and Server Components**: https://tkdodo.eu/blog/you-might-not-need-react-query[](https://tkdodo.eu/blog/you-might-not-need-react-query)
+  // Optional: If this action affects data displayed on a server-rendered page,
+  // you might want to revalidate the path or tag.
+  // revalidatePath('/some-server-page');
 
----
+  console.log("Server Action: Post created -", newPost);
+  return newPost; // Return data from the action
+}
+```
 
-### 9. Conclusion
+**b) Call Server Action with `useMutation`**
 
-Migrating to TanStack Query v5 in a Next.js App Router project involves updating dependencies, adapting to new hook signatures, and leveraging Server Components for optimal data fetching. By following this guide, you can integrate TanStack Query seamlessly, adhere to best practices, and avoid common pitfalls. Focus on using Server Components for prefetching, Client Components for interactivity, and suspense for streaming to create a performant and modern application.
+In your Client Component form, use `useMutation`, passing the imported Server Action to `mutationFn`.
 
-If you encounter specific issues during migration, feel free to share details, and I can provide targeted assistance!
+```javascript
+// components/AddPostFormServerAction.js
+"use client";
+
+import React from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createPostAction } from "@/app/actions"; // Import the Server Action
+
+export default function AddPostFormServerAction() {
+  const queryClient = useQueryClient();
+  const formRef = React.useRef(null); // Ref to reset the form
+
+  const mutation = useMutation({
+    mutationFn: createPostAction, // Pass the Server Action directly
+    onSuccess: (data) => {
+      console.log("Server Action Success:", data);
+      // Invalidate queries that should be refetched after the action
+      queryClient.invalidateQueries({ queryKey: ["posts"] }); // Or ['posts-hydrated'], etc.
+      queryClient.invalidateQueries({ queryKey: ["posts-hydrated"] });
+
+      // Reset the form
+      formRef.current?.reset();
+    },
+    onError: (error) => {
+      console.error("Server Action Error:", error);
+      alert(`Error: ${error.message}`); // Show error to user
+    },
+  });
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.mutate(formData); // Pass FormData to the mutation
+  };
+
+  return (
+    <form ref={formRef} onSubmit={handleSubmit}>
+      <h3>Add New Post (via Server Action)</h3>
+      <input
+        type="text"
+        name="title" // Ensure input has a name attribute for FormData
+        placeholder="Post title"
+        disabled={mutation.isPending}
+        required
+      />
+      <button type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? "Adding..." : "Add Post"}
+      </button>
+      {mutation.isError && (
+        <p style={{ color: "red" }}>Error: {mutation.error.message}</p>
+      )}
+    </form>
+  );
+}
+```
+
+### 8. DevTools
+
+The `<ReactQueryDevtools />` component (added inside the provider wrapper in step 4a) provides a powerful tool during development to inspect your query cache, see query statuses, manually refetch, etc. They only render in development mode.
+
+### 9. Configuration & Best Practices
+
+- **Singleton `QueryClient`**: Essential for consistent caching. Use the `React.cache` pattern for server-side prefetching and the `typeof window` check for the client-side provider.
+- **Query Keys**: Structure them consistently (e.g., `['todos', 'list', { status: 'done' }]`). They determine caching, so be precise. Ensure they are serializable.
+- **`staleTime` vs `gcTime`**:
+  - `staleTime`: How long data is considered fresh (won't refetch on mount/window focus). Default is `0`. Increase for data that doesn't change often, especially when hydrating.
+  - `gcTime`: How long _inactive_ data stays in cache before being garbage collected. Default is 5 minutes. Increase if you want data to remain available longer even if unused (e.g., for quick revisits).
+- **Error Handling**: Implement `isError` checks and potentially use React Error Boundaries for critical queries.
+- **Server Components**: Fetch data directly or use the prefetch/hydration pattern for optimal user experience and to leverage React Query's client-side features.
+- **Client Components**: Use `useQuery` for data fetching and `useMutation` for updates/creations/deletions, integrating with Server Actions where appropriate.
+- **Invalidation vs Manual Updates**: Prefer `invalidateQueries` after mutations for simplicity and ensuring data consistency with the server. Use `setQueryData` for optimistic updates or specific caching scenarios, but be mindful of potential inconsistencies.
+
+### 10. Conclusion
+
+TanStack Query offers a robust and efficient way to manage server state in modern Next.js applications. By setting up the `QueryClientProvider`, utilizing hooks like `useQuery` and `useMutation`, leveraging the prefetching/hydration pattern with Server Components, and integrating with Server Actions, you can build fast, resilient, and maintainable data-driven UIs. Remember to configure `staleTime` appropriately when using hydration and manage your query keys effectively.

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import Container from "./container";
+import UserNav from "./user-nav";
 
-export default function Header({ showAuthButtons = true }) {
+export default function Header({ session }) {
+  const isAuthenticated = session?.user?.isActive;
+
   return (
     <header className="border-b border-border/40">
       <Container size="wide" className="flex h-16 items-center justify-between">
@@ -24,7 +27,9 @@ export default function Header({ showAuthButtons = true }) {
             Pricing
           </Link>
 
-          {showAuthButtons && (
+          {isAuthenticated ? (
+            <UserNav user={session.user} />
+          ) : (
             <>
               <Link
                 href="/login"
