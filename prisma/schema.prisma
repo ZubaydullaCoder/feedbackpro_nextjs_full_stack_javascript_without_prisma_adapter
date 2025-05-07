@@ -16,6 +16,18 @@ enum UserRole {
   ADMIN
 }
 
+enum SurveyStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum QuestionType {
+  TEXT
+  RATING_SCALE_5
+  YES_NO
+}
+
 model User {
   id             String    @id @default(cuid())
   email          String    @unique
@@ -26,6 +38,75 @@ model User {
   googleId       String?   @unique
   role           UserRole  @default(BUSINESS_OWNER)
   isActive       Boolean   @default(true)
+  business       Business?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+model Business {
+  id        String   @id @default(cuid())
+  name      String?
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveys   Survey[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Survey {
+  id              String           @id @default(cuid())
+  name            String
+  description     String?
+  status          SurveyStatus     @default(ACTIVE)
+  businessId      String
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  questions       Question[]
+  responseEntities ResponseEntity[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([businessId])
+}
+
+model Question {
+  id         String       @id @default(cuid())
+  text       String
+  type       QuestionType
+  order      Int
+  isRequired Boolean      @default(true)
+  surveyId   String
+  survey     Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses  Response[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([surveyId])
+}
+
+model ResponseEntity {
+  id        String    @id @default(cuid())
+  type      String    // "QR" or "SMS"
+  status    String    @default("PENDING") // "PENDING", "COMPLETED"
+  phoneNumber String?  // For SMS type
+  surveyId  String
+  survey    Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses Response[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([surveyId])
+}
+
+model Response {
+  id               String         @id @default(cuid())
+  value            String
+  questionId       String
+  question         Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responseEntityId String
+  responseEntity   ResponseEntity @relation(fields: [responseEntityId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([questionId])
+  @@index([responseEntityId])
 }
