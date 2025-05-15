@@ -28,6 +28,11 @@ enum QuestionType {
   YES_NO
 }
 
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
 model User {
   id             String    @id @default(cuid())
   email          String    @unique
@@ -44,13 +49,14 @@ model User {
 }
 
 model Business {
-  id        String   @id @default(cuid())
-  name      String?
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  surveys   Survey[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String         @id @default(cuid())
+  name          String?
+  userId        String         @unique
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveys       Survey[]
+  discountCodes DiscountCode[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Survey {
@@ -84,22 +90,24 @@ model Question {
 }
 
 model ResponseEntity {
-  id        String    @id @default(cuid())
-  type      String    // "QR" or "SMS"
-  status    String    @default("PENDING") // "PENDING", "COMPLETED"
-  phoneNumber String?  // For SMS type
-  surveyId  String
-  survey    Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  responses Response[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String        @id @default(cuid())
+  type         String        // "DIRECT_SMS" or "QR_INITIATED_SMS"
+  status       String        @default("PENDING") // "PENDING", "COMPLETED"
+  phoneNumber  String?       // Store phone number for SMS sending
+  submittedAt  DateTime?
+  surveyId     String
+  survey       Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses    Response[]
+  discountCode DiscountCode?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([surveyId])
 }
 
 model Response {
   id               String         @id @default(cuid())
-  value            String
+  value            String         // Using 'value' instead of 'answer' to match the database
   questionId       String
   question         Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
   responseEntityId String
@@ -109,4 +117,23 @@ model Response {
 
   @@index([questionId])
   @@index([responseEntityId])
+}
+
+model DiscountCode {
+  id               String         @id @default(cuid())
+  code             String         @unique
+  discountType     DiscountType
+  discountValue    Float
+  isRedeemed       Boolean        @default(false)
+  redeemedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  responseEntityId String?        @unique
+  responseEntity   ResponseEntity? @relation(fields: [responseEntityId], references: [id])
+  businessId       String
+  business         Business       @relation(fields: [businessId], references: [id])
+
+  @@index([code])
+  @@index([businessId])
 }

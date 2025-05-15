@@ -5,7 +5,7 @@ import Footer from "@/components/shared/footer";
 import Container from "@/components/shared/container";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, QrCode } from "lucide-react";
+import { LayoutDashboard, ClipboardList, QrCode, Gift } from "lucide-react";
 
 export default async function BusinessOwnerLayout({ children }) {
   const session = await auth();
@@ -32,7 +32,7 @@ export default async function BusinessOwnerLayout({ children }) {
       <div className="bg-muted py-4 border-b">
         <Container size="default">
           <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full max-w-md mx-auto grid-cols-3">
+            <TabsList className="grid w-full max-w-md mx-auto grid-cols-4">
               <TabsTrigger value="dashboard" asChild>
                 <Link href="/dashboard" className="flex items-center gap-2">
                   <LayoutDashboard className="h-4 w-4" />
@@ -43,6 +43,12 @@ export default async function BusinessOwnerLayout({ children }) {
                 <Link href="/surveys" className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4" />
                   <span className="hidden sm:inline">Surveys</span>
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="incentives" asChild>
+                <Link href="/incentives" className="flex items-center gap-2">
+                  <Gift className="h-4 w-4" />
+                  <span className="hidden sm:inline">Incentives</span>
                 </Link>
               </TabsTrigger>
               <TabsTrigger value="verify" asChild>

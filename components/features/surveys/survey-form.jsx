@@ -100,13 +100,6 @@ export default function SurveyForm({ userId }) {
           description: result.error,
           variant: "destructive",
         });
-
-        // If it's a user not found error, redirect to login
-        if (result.error.includes("User not found")) {
-          setTimeout(() => {
-            router.push("/login");
-          }, 2000);
-        }
       } else {
         toast({
           title: "Success",

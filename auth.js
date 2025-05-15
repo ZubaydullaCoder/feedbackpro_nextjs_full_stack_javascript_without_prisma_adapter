@@ -97,7 +97,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Handle OAuth Sign-in (Google, etc.)
       if (account?.provider === "google" && profile) {
-        console.log("[JWT Callback] Processing Google sign-in...");
+        // console.log("[JWT Callback] Processing Google sign-in...");
         try {
           // Try to find user by googleId
           let dbUser = await prisma.user.findUnique({
@@ -153,10 +153,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           if (dbUser) {
             // Log the user object fetched/created from DB
-            console.log(
-              "[JWT Callback - Google] Found/Created dbUser:",
-              dbUser
-            );
+            // console.log(
+            //   "[JWT Callback - Google] Found/Created dbUser:",
+            //   dbUser
+            // );
             // Set token data from database user
             token.sub = dbUser.id;
             token.email = dbUser.email;
@@ -166,7 +166,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.isActive = dbUser.isActive;
           }
           // Log the token state after attempting Google user processing
-          console.log("[JWT Callback - Google] Token after processing:", token);
+          // console.log("[JWT Callback - Google] Token after processing:", token);
         } catch (error) {
           console.error("JWT Google callback error:", error);
         }
@@ -175,7 +175,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Handle Credentials Sign-in
       // The 'user' object is passed from the 'authorize' callback on successful credentials login.
       if (account?.provider === "credentials" && user) {
-        console.log("[JWT Callback] Processing Credentials sign-in...");
+        // console.log("[JWT Callback] Processing Credentials sign-in...");
         token.sub = user.id;
         token.email = user.email;
         token.name = user.name;
@@ -185,7 +185,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Log the final token being returned by the JWT callback
-      console.log("[JWT Callback] Returning token:", token);
+      // console.log("[JWT Callback] Returning token:", token);
 
       // We'll rely on the initial token data for user status
       // This avoids Prisma queries in the JWT callback which can run in the browser

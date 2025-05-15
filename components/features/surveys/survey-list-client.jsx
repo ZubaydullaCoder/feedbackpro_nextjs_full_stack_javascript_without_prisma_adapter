@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +15,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { deleteSurvey } from "@/lib/actions/survey.actions";
+import {
   ClipboardList,
   Eye,
   MessageSquare,
   QrCode,
   Search,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -37,15 +52,96 @@ const getStatusBadge = (status) => {
 };
 
 export default function SurveyListClient({ surveys }) {
+  const router = useRouter();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [surveyToDelete, setSurveyToDelete] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Filter surveys based on search term
   const filteredSurveys = surveys.filter((survey) =>
     survey.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Handle delete button click
+  const handleDeleteClick = (survey) => {
+    setSurveyToDelete(survey);
+    setShowDeleteDialog(true);
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!surveyToDelete) return;
+
+    setIsDeleting(true);
+
+    try {
+      const result = await deleteSurvey(surveyToDelete.id);
+
+      if (result.error) {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Survey deleted successfully!",
+        });
+
+        // Refresh the page to show updated list
+        router.refresh();
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete survey. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              survey "{surveyToDelete?.name}" and all of its data, including
+              questions and responses.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteConfirm();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {surveys.length > 0 ? (
         <>
           <div className="relative">
@@ -104,17 +200,28 @@ export default function SurveyListClient({ surveys }) {
                       </div>
                     </CardContent>
                     <CardFooter className="pt-3 border-t flex justify-between">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                        className="gap-1"
-                      >
-                        <Link href={`/surveys/${survey.id}`}>
-                          <Eye className="h-4 w-4" />
-                          <span>View</span>
-                        </Link>
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          className="gap-1"
+                        >
+                          <Link href={`/surveys/${survey.id}`}>
+                            <Eye className="h-4 w-4" />
+                            <span>View</span>
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => handleDeleteClick(survey)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Delete</span>
+                        </Button>
+                      </div>
                       <Button
                         variant="secondary"
                         size="sm"

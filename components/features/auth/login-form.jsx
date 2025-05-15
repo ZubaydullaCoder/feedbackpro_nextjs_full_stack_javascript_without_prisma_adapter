@@ -62,7 +62,7 @@ export default function LoginForm() {
 
       if (result?.error) {
         // Determine the appropriate error message
-        console.log("Login error:", result.error);
+        // console.log("Login error:", result.error);
         let errorTitle = "Authentication failed";
         let errorDescription = "Please check your credentials and try again.";
 

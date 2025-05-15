@@ -8,6 +8,7 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/surveys/:path*",
+    "/incentives/:path*",
     "/admin/:path*",
     "/login",
     "/register",

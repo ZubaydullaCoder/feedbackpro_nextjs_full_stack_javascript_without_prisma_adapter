@@ -47,6 +47,7 @@ export async function generateMetadata({ params }) {
 export default async function SurveyDetailsPage({ params }) {
   const session = await auth();
   const userId = session.user.id;
+  const { surveyId } = await params;
 
   // Find the business for this user
   const business = await prisma.business.findUnique({
@@ -57,10 +58,10 @@ export default async function SurveyDetailsPage({ params }) {
     notFound();
   }
 
-  // Fetch the survey with its questions
+  // Fetch the survey with its questions and responses
   const survey = await prisma.survey.findUnique({
     where: {
-      id: params.surveyId,
+      id: surveyId,
       businessId: business.id,
     },
     include: {
@@ -68,13 +69,21 @@ export default async function SurveyDetailsPage({ params }) {
         orderBy: { order: "asc" },
       },
       responseEntities: {
-        select: {
-          id: true,
-          type: true,
-          status: true,
-          createdAt: true,
-        },
+        // No filter on status for now to avoid the enum issue
         orderBy: { createdAt: "desc" },
+        include: {
+          responses: {
+            include: {
+              question: {
+                select: {
+                  text: true,
+                  type: true,
+                  order: true,
+                },
+              },
+            },
+          },
+        },
       },
     },
   });
@@ -107,7 +116,7 @@ export default async function SurveyDetailsPage({ params }) {
         </div>
       </div>
       <Separator />
-      <SurveyDetailsClient survey={survey} surveyId={params.surveyId} />
+      <SurveyDetailsClient survey={survey} surveyId={surveyId} />
     </div>
   );
 }

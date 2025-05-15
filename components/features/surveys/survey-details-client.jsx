@@ -1,22 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/hooks/use-toast";
+import ResponseViewer from "@/components/features/surveys/response-viewer";
+import SmsInviteForm from "@/components/features/surveys/sms-invite-form";
 import {
   ClipboardCheck,
-  ClipboardCopy,
-  Loader2,
-  QrCode,
   MessageSquare,
-  AlertCircle,
+  MessageCircle,
+  Phone,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 // Helper function to get status badge variant
 const getStatusBadge = (status) => {
@@ -47,43 +49,17 @@ const getQuestionTypeDisplay = (type) => {
 };
 
 export default function SurveyDetailsClient({ survey, surveyId }) {
-  const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
-
-  // Fetch QR code data
-  const {
-    data: qrData,
-    isLoading: isLoadingQr,
-    isError: isErrorQr,
-    error: qrError,
-  } = useQuery({
-    queryKey: ["surveyQr", surveyId],
-    queryFn: async () => {
-      const res = await fetch(`/api/survey/${surveyId}/qr`);
-      if (!res.ok) {
-        throw new Error("Failed to fetch QR code");
-      }
-      return res.json();
-    },
-  });
-
-  // Handle copy to clipboard
-  const copyToClipboard = () => {
-    if (qrData?.surveyUrl) {
-      navigator.clipboard.writeText(qrData.surveyUrl);
-      setCopied(true);
-      toast({
-        title: "URL Copied",
-        description: "Survey URL copied to clipboard",
-      });
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // Count responses
-  const responseCount = survey.responseEntities.filter(
+  // Count responses - filter completed responses on the client side
+  const completedResponses = survey.responseEntities.filter(
     (entity) => entity.status === "COMPLETED"
-  ).length;
+  );
+  const responseCount = completedResponses.length;
+
+  // Count SMS entities - only DIRECT_SMS now
+  const smsEntities = survey.responseEntities.filter(
+    (entity) => entity.type === "DIRECT_SMS"
+  );
+  const smsCount = smsEntities.length;
 
   return (
     <Tabs defaultValue="details" className="w-full">
@@ -92,9 +68,9 @@ export default function SurveyDetailsClient({ survey, surveyId }) {
           <ClipboardCheck className="h-4 w-4" />
           <span>Details</span>
         </TabsTrigger>
-        <TabsTrigger value="qr" className="flex items-center gap-2">
-          <QrCode className="h-4 w-4" />
-          <span>QR Code</span>
+        <TabsTrigger value="sms" className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4" />
+          <span>SMS ({smsCount})</span>
         </TabsTrigger>
         <TabsTrigger value="responses" className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4" />
@@ -169,120 +145,71 @@ export default function SurveyDetailsClient({ survey, surveyId }) {
         </div>
       </TabsContent>
 
-      <TabsContent value="qr" className="space-y-6">
+      <TabsContent value="sms" className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">QR Code</CardTitle>
+            <CardTitle className="text-lg">Send SMS Invitation</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col items-center">
-            {isLoadingQr && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Generating QR code...
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Send a unique survey link via SMS to collect feedback from a
+                specific customer. Each link includes a discount code that will
+                be shown after submission.
+              </p>
+              <SmsInviteForm surveyId={surveyId} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">SMS Tracking</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {smsEntities.length === 0 ? (
+              <div className="text-center py-8">
+                <Phone className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground">
+                  No SMS invitations have been sent yet.
                 </p>
               </div>
-            )}
-
-            {isErrorQr && (
-              <div className="flex flex-col items-center justify-center py-8 text-destructive">
-                <AlertCircle className="h-8 w-8" />
-                <p className="mt-2 text-sm">
-                  Error generating QR code:{" "}
-                  {qrError?.message || "Unknown error"}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => window.location.reload()}
-                >
-                  Try Again
-                </Button>
-              </div>
-            )}
-
-            {qrData && (
-              <div className="flex flex-col items-center">
-                <div className="border p-4 rounded-lg bg-white">
-                  <Image
-                    src={qrData.qrCode}
-                    alt="Survey QR Code"
-                    width={200}
-                    height={200}
-                    priority
-                  />
-                </div>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Scan this QR code to access the survey
-                </p>
-                <div className="mt-6 flex flex-col items-center">
-                  <p className="text-sm font-medium mb-2">Survey URL:</p>
-                  <div className="flex items-center gap-2">
-                    <code className="bg-muted px-2 py-1 rounded text-sm">
-                      {qrData.surveyUrl}
-                    </code>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={copyToClipboard}
-                      className="h-8 w-8 p-0"
-                    >
-                      {copied ? (
-                        <ClipboardCheck className="h-4 w-4" />
-                      ) : (
-                        <ClipboardCopy className="h-4 w-4" />
-                      )}
-                      <span className="sr-only">
-                        {copied ? "Copied" : "Copy URL"}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-                <Separator className="my-6" />
-                <div className="text-center">
-                  <h3 className="font-medium">Print or Download</h3>
-                  <p className="text-sm text-muted-foreground mt-1 mb-4">
-                    Save this QR code to use in your physical location
-                  </p>
-                  <Button
-                    onClick={() => {
-                      const printWindow = window.open("", "_blank");
-                      printWindow.document.write(`
-                        <html>
-                          <head>
-                            <title>Survey QR Code - ${survey.name}</title>
-                            <style>
-                              body { font-family: system-ui, sans-serif; text-align: center; padding: 2rem; }
-                              h1 { font-size: 1.5rem; margin-bottom: 1rem; }
-                              img { max-width: 100%; height: auto; }
-                              .container { max-width: 500px; margin: 0 auto; }
-                              .qr-container { border: 1px solid #ddd; padding: 1rem; display: inline-block; background: white; }
-                              .url { margin-top: 1rem; font-family: monospace; word-break: break-all; }
-                            </style>
-                          </head>
-                          <body>
-                            <div class="container">
-                              <h1>${survey.name}</h1>
-                              <div class="qr-container">
-                                <img src="${qrData.qrCode}" alt="Survey QR Code" />
-                              </div>
-                              <p class="url">${qrData.surveyUrl}</p>
-                              <p>Scan this QR code to provide feedback</p>
-                            </div>
-                          </body>
-                        </html>
-                      `);
-                      printWindow.document.close();
-                      printWindow.focus();
-                      setTimeout(() => {
-                        printWindow.print();
-                      }, 250);
-                    }}
-                  >
-                    Print QR Code
-                  </Button>
-                </div>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Phone Number</TableHead>
+                      <TableHead>Sent At</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {smsEntities.map((entity) => (
+                      <TableRow key={entity.id}>
+                        <TableCell>
+                          {entity.phoneNumber ? entity.phoneNumber : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(entity.createdAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              entity.status === "COMPLETED"
+                                ? "success"
+                                : "outline"
+                            }
+                          >
+                            {entity.status === "COMPLETED"
+                              ? "Completed"
+                              : "Pending"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
@@ -295,19 +222,7 @@ export default function SurveyDetailsClient({ survey, surveyId }) {
             <CardTitle className="text-lg">Survey Responses</CardTitle>
           </CardHeader>
           <CardContent>
-            {responseCount === 0 ? (
-              <div className="text-center py-8">
-                <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-medium">No responses yet</h3>
-                <p className="text-muted-foreground mt-1">
-                  Share your survey to start collecting feedback
-                </p>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">
-                Response details will be implemented in Phase 4
-              </p>
-            )}
+            <ResponseViewer responses={completedResponses} />
           </CardContent>
         </Card>
       </TabsContent>
